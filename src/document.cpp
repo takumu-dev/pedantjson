@@ -101,8 +101,14 @@ std::string_view SyntaxError::message() const noexcept {
         return "string not closed before the end of the text";
     case SyntaxErrorCode::invalid_escape:
         return "invalid escape in a string";
+    case SyntaxErrorCode::unpaired_surrogate:
+        return "unpaired surrogate in a string";
     case SyntaxErrorCode::control_character_in_string:
         return "unescaped control character in a string";
+    case SyntaxErrorCode::invalid_utf8:
+        return "invalid UTF-8";
+    case SyntaxErrorCode::too_deep:
+        return "arrays and objects nested too deeply";
     case SyntaxErrorCode::trailing_content:
         return "unexpected content after the value";
     }

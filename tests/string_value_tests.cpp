@@ -83,6 +83,43 @@ TEST_CASE("a surrogate pair of \\u escapes stands for one code point", "[strings
     CHECK(string_of(text) == expected);
 }
 
+TEST_CASE("a high surrogate escape not followed by a low one is unpaired, at its backslash",
+          "[strings]") {
+    auto [text, offset] = GENERATE(table<std::string, std::size_t>({
+        {R"("\ud800")", 1},
+        {R"("\uDADA")", 1},
+        {R"("\ud800abc")", 1},
+        {R"("\ud800\n")", 1},
+        {R"("\ud800\u0041")", 1},
+        {R"("\ud800\ud800\udc00")", 1},
+        {R"("a\udbff")", 2},
+        {R"("\u0041\ud800")", 7},
+        {R"("\ud800\udc00\ud800")", 13},
+        {R"({"\ud800": 0})", 2},
+    }));
+    CAPTURE(text);
+    const auto error = syntax_error(text);
+    CHECK(error.code == SyntaxErrorCode::unpaired_surrogate);
+    CHECK(error.offset == offset);
+}
+
+TEST_CASE("a low surrogate escape without a high one before it is unpaired, at its backslash",
+          "[strings]") {
+    auto [text, offset] = GENERATE(table<std::string, std::size_t>({
+        {R"("\udc00")", 1},
+        {R"("\uDFAA")", 1},
+        {R"("a\udfff")", 2},
+        {R"("\u0041\udc00")", 7},
+        {R"("\udd1e\ud834")", 1},
+        {R"("\ud800\udc00\udc00")", 13},
+        {R"({"\uDFAA": 0})", 2},
+    }));
+    CAPTURE(text);
+    const auto error = syntax_error(text);
+    CHECK(error.code == SyntaxErrorCode::unpaired_surrogate);
+    CHECK(error.offset == offset);
+}
+
 TEST_CASE("escapes and plain characters mix in any order", "[strings]") {
     CHECK(string_of(R"("a\nb\u0041c")") == "a\nbAc");
     CHECK(string_of(R"("\\n")") == "\\n");
@@ -91,7 +128,7 @@ TEST_CASE("escapes and plain characters mix in any order", "[strings]") {
 
 TEST_CASE("a string still open at the end of the text is unterminated at the end", "[strings]") {
     auto text = GENERATE(as<std::string>{}, R"(")", R"("abc)", R"("\")", R"("\)", R"("\u)",
-                         R"("\u12)", R"("\ud800\u)");
+                         R"("\u12)", R"("\ud800)", R"("\ud800\u)");
     CAPTURE(text);
     const auto error = syntax_error(text);
     CHECK(error.code == SyntaxErrorCode::unterminated_string);
@@ -108,6 +145,7 @@ TEST_CASE("an escape JSON doesn't have is invalid at the character after the bac
         {R"("\ ")", 2},
         {R"("\U0041")", 2},
         {R"("ab\N")", 4},
+        {R"("\ud800\x")", 8},
     }));
     CAPTURE(text);
     const auto error = syntax_error(text);
@@ -139,6 +177,7 @@ TEST_CASE("a control character written into a string is an error at that charact
         {"\"\x01\"", 1},
         {"\"\x1f\"", 1},
         {std::string{"\"a\0b\"", 5}, 2},
+        {"\"\\ud800\x01\"", 7},
     }));
     CAPTURE(text);
     const auto error = syntax_error(text);
