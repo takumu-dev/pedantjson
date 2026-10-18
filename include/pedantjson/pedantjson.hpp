@@ -375,7 +375,10 @@ enum class SyntaxErrorCode : std::uint8_t {
     invalid_number,              ///< A number against the grammar, such as `01`, `1.e5` or `-x`.
     unterminated_string,         ///< A string whose closing quote never comes.
     invalid_escape,              ///< A backslash in a string that doesn't begin an escape JSON has.
+    unpaired_surrogate,          ///< A `\u` escape of a surrogate that isn't half of a pair.
     control_character_in_string, ///< A character below U+0020 written into a string unescaped.
+    invalid_utf8,                ///< Bytes that aren't UTF-8, such as 0xFF or an overlong form.
+    too_deep,                    ///< Arrays and objects nested deeper than `max_depth` allows.
     trailing_content,            ///< Something other than whitespace after the value.
 };
 
@@ -397,8 +400,13 @@ struct SyntaxError {
     [[nodiscard]] std::string_view message() const noexcept;
 };
 
-/// How `parse` reads a text. There are no options yet; this is where they will go.
-struct ParseOptions {};
+/// How `parse` reads a text.
+struct ParseOptions {
+    /// How deeply arrays and objects may nest: an array or an object inside `max_depth` others is
+    /// too deep. The parser doesn't recurse, so no nesting can overflow its stack; the limit keeps
+    /// a program that walks the document by recursion from overflowing its own.
+    std::size_t max_depth = 256;
+};
 
 /// A JSON text read into an immutable tree.
 ///

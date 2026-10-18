@@ -80,13 +80,11 @@ TEST_CASE("whitespace is spaces, tabs, line feeds and carriage returns only", "[
 
 TEST_CASE("every code has a message of its own", "[syntax errors]") {
     const auto codes = {
-        SyntaxErrorCode::empty_input,
-        SyntaxErrorCode::unexpected_character,
-        SyntaxErrorCode::unexpected_end,
-        SyntaxErrorCode::invalid_number,
-        SyntaxErrorCode::unterminated_string,
-        SyntaxErrorCode::invalid_escape,
-        SyntaxErrorCode::control_character_in_string,
+        SyntaxErrorCode::empty_input,         SyntaxErrorCode::unexpected_character,
+        SyntaxErrorCode::unexpected_end,      SyntaxErrorCode::invalid_number,
+        SyntaxErrorCode::unterminated_string, SyntaxErrorCode::invalid_escape,
+        SyntaxErrorCode::unpaired_surrogate,  SyntaxErrorCode::control_character_in_string,
+        SyntaxErrorCode::invalid_utf8,        SyntaxErrorCode::too_deep,
         SyntaxErrorCode::trailing_content,
     };
     std::set<std::string_view> messages;

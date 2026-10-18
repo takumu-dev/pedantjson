@@ -10,10 +10,10 @@ It is meant for formats written by hand, whose readers have to point at each mis
 parser that quietly keeps the last of two duplicate keys, or forgets where a value came from, can't
 do that.
 
-pedantjson is at an early stage, and has no release yet. Today it reads the whole of the grammar
-of [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259). Still to come are checks for what the RFC
-leaves open, such as invalid UTF-8 and unpaired surrogates, numbers read into the type a caller
-asks for, lines and columns, and JSON pointers.
+pedantjson is at an early stage, and has no release yet. Today it reads the grammar of
+[RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) strictly, rejecting every text the RFC forbids
+and deciding each case the RFC leaves open, as [Strictness](#strictness) describes. Still to come
+are numbers read into the type a caller asks for, lines and columns, and JSON pointers.
 
 ## Example
 
@@ -48,6 +48,7 @@ width at offset 13 is 2
 Everything is in namespace `pedantjson`, in the one header `<pedantjson/pedantjson.hpp>`.
 
 - `parse(std::string text, ParseOptions = {})` returns a `std::expected<Document, SyntaxError>`.
+  `ParseOptions::max_depth` limits how deeply arrays and objects may nest.
 - A `Document` owns the text and the tree read from it. It can be moved but not copied.
 - A `Value` is a cheap handle into a document, valid while the document lives, through any move of
   it. `kind()` says which of `null`, `boolean`, `number`, `string`, `array` or `object` it is, and
@@ -59,6 +60,29 @@ Everything is in namespace `pedantjson`, in the one header `<pedantjson/pedantjs
   that must treat duplicates walks the members.
 - A `Number` keeps its text, exactly as written.
 - A `SyntaxError` has a `code`, the `offset` where the text stops being JSON, and a `message()`.
+
+## Strictness
+
+pedantjson reads only what RFC 8259 calls JSON, and decides the cases the RFC leaves to the parser
+as follows:
+
+- The text is UTF-8, the only encoding the RFC allows between systems. Bytes that aren't UTF-8,
+  wherever they stand, are a syntax error of their own, `invalid_utf8`: a byte that begins no
+  sequence, a sequence cut short, a character written in more bytes than it needs, an encoded
+  surrogate, or a code point beyond U+10FFFF. A text in UTF-16 or UTF-32 is rejected.
+- A byte-order mark at the start of the text is ignored, though offsets still count its three
+  bytes. Anywhere else it is a character, allowed only in a string.
+- A `\u` escape of a surrogate has to be half of a pair: a high surrogate followed at once by a
+  `\u` escape of a low one. Any other surrogate escape is `unpaired_surrogate`, at its backslash,
+  since it stands for no character. Escapes of noncharacters such as U+FFFF, and of U+0000, are
+  read, since they stand for characters.
+- Arrays and objects may nest as deeply as `ParseOptions::max_depth`, 256 by default. The bracket
+  that goes deeper is `too_deep`. The parser keeps its own stack rather than recursing, so the
+  limit isn't for its sake but for a program that walks the document by recursion.
+- A number of any size or precision is read, and keeps its text, so a value too large for a type
+  is caught when it is read into that type rather than when the text is read.
+- An object keeps every member, duplicate names included, and leaves it to the caller whether a
+  duplicate is an error.
 
 ## Requirements
 

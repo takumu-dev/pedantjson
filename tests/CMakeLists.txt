@@ -6,7 +6,9 @@ include(Catch)
 add_executable(pedantjson_tests
     array_tests.cpp
     document_tests.cpp
+    encoding_tests.cpp
     literal_tests.cpp
+    nesting_tests.cpp
     number_tests.cpp
     object_tests.cpp
     string_value_tests.cpp

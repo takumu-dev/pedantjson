@@ -102,7 +102,8 @@ TEST_CASE("a default array is empty", "[arrays]") {
 
 TEST_CASE("arrays nested a hundred thousand deep are read", "[arrays]") {
     constexpr std::size_t depth = 100'000;
-    const auto document = parsed(std::string(depth, '[') + std::string(depth, ']'));
+    const auto document =
+        parsed(std::string(depth, '[') + std::string(depth, ']'), {.max_depth = depth});
     auto value = document.root();
     std::size_t levels = 1;
     while (!value.as_array()->empty()) {

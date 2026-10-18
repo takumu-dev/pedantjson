@@ -15,10 +15,71 @@ namespace pedantjson {
 
 namespace {
 
+/// U+FEFF in UTF-8, which a text may begin with.
+constexpr std::string_view byte_order_mark = "\xef\xbb\xbf";
+
+/// The length of the well-formed UTF-8 sequence that begins at `offset`, as Table 3-7 of the
+/// Unicode Standard defines one.
+///
+/// \param text The text.
+/// \param offset Where the sequence begins, which must be before the end of the text.
+/// \return Its length in bytes, or 0 if the bytes there aren't UTF-8.
+std::size_t utf8_sequence_length(std::string_view text, std::size_t offset) {
+    // The precondition, and the check of the length below, keep every byte read within the text.
+    const auto byte = [text](std::size_t at) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): see above
+        return static_cast<unsigned char>(text[at]);
+    };
+    const unsigned char lead = byte(offset);
+    if (lead < 0x80) {
+        return 1;
+    }
+    // The lead byte gives the length, and the range of the byte after it. That range is narrower
+    // than a continuation byte's for the leads whose sequences could otherwise encode a code point
+    // in more bytes than it needs, a surrogate, or one beyond U+10FFFF.
+    std::size_t length = 0;
+    unsigned char low = 0x80;
+    unsigned char high = 0xbf;
+    if (lead >= 0xc2 && lead <= 0xdf) {
+        length = 2;
+    } else if (lead == 0xe0) {
+        length = 3;
+        low = 0xa0;
+    } else if (lead == 0xed) {
+        length = 3;
+        high = 0x9f;
+    } else if (lead >= 0xe1 && lead <= 0xef) {
+        length = 3;
+    } else if (lead == 0xf0) {
+        length = 4;
+        low = 0x90;
+    } else if (lead == 0xf4) {
+        length = 4;
+        high = 0x8f;
+    } else if (lead >= 0xf1 && lead <= 0xf3) {
+        length = 4;
+    } else {
+        return 0;
+    }
+    if (text.size() - offset < length) {
+        return 0;
+    }
+    for (std::size_t next = 1; next < length; ++next) {
+        const unsigned char continuation = byte(offset + next);
+        if (continuation < low || continuation > high) {
+            return 0;
+        }
+        low = 0x80;
+        high = 0xbf;
+    }
+    return length;
+}
+
 /// Reads one text into the storage of a document.
 class Parser {
   public:
-    explicit Parser(std::string text) : storage_(std::make_unique<detail::Storage>()) {
+    Parser(std::string text, ParseOptions options)
+        : storage_(std::make_unique<detail::Storage>()), options_(options) {
         storage_->text = std::move(text);
         text_ = storage_->text;
     }
@@ -30,6 +91,10 @@ class Parser {
     ///
     /// \return The storage the text was read into.
     std::expected<std::unique_ptr<detail::Storage>, SyntaxError> run() {
+        // A byte-order mark says nothing in UTF-8, the only encoding read, but editors write one.
+        if (text_.starts_with(byte_order_mark)) {
+            offset_ = byte_order_mark.size();
+        }
         skip_whitespace();
         if (at_end()) {
             return fail(SyntaxErrorCode::empty_input);
@@ -63,7 +128,17 @@ class Parser {
 
     /// The error of the given kind at the current offset.
     [[nodiscard]] std::unexpected<SyntaxError> fail(SyntaxErrorCode code) const noexcept {
-        return std::unexpected(SyntaxError{.code = code, .offset = offset_});
+        return fail_at(code, offset_);
+    }
+
+    /// The error of the given kind at `offset`, or `invalid_utf8` if the bytes there aren't UTF-8,
+    /// since that is the first thing wrong with them whatever the grammar expected.
+    [[nodiscard]] std::unexpected<SyntaxError> fail_at(SyntaxErrorCode code,
+                                                       std::size_t offset) const noexcept {
+        if (offset < text_.size() && utf8_sequence_length(text_, offset) == 0) {
+            code = SyntaxErrorCode::invalid_utf8;
+        }
+        return std::unexpected(SyntaxError{.code = code, .offset = offset});
     }
 
     void skip_whitespace() noexcept {
@@ -102,7 +177,9 @@ class Parser {
             return storage_->nodes.size() - 1;
         }
         const Kind kind = peek() == '[' ? Kind::array : Kind::object;
-        open(kind);
+        if (auto opened = open(kind); !opened) {
+            return std::unexpected(opened.error());
+        }
         skip_whitespace();
         if (!at_end() && peek() == closing_bracket(kind)) {
             ++offset_;
@@ -176,12 +253,16 @@ class Parser {
         return {};
     }
 
-    /// Opens an array or an object at its bracket.
-    void open(Kind kind) {
+    /// Opens an array or an object at its bracket, unless it is nested too deeply.
+    std::expected<void, SyntaxError> open(Kind kind) {
+        if (frames_.size() == options_.max_depth) {
+            return fail(SyntaxErrorCode::too_deep);
+        }
         frames_.push_back(
             Frame{.node = storage_->nodes.size(), .kind = kind, .first_pending = pending_.size()});
         add_node(kind);
         ++offset_;
+        return {};
     }
 
     /// Closes the innermost array or object, after its closing bracket, moving its children from
@@ -300,27 +381,48 @@ class Parser {
         bool escaped = false;
         // Where the characters not yet copied to the decoded strings begin.
         std::size_t run = offset_;
+        // The high surrogate escape just read, which the next escape has to pair.
+        std::optional<Escape> high;
         while (true) {
             if (at_end()) {
                 return fail(SyntaxErrorCode::unterminated_string);
             }
             const char c = peek();
-            if (c == '"') {
-                break;
-            }
             if (c == '\\') {
                 escaped = true;
                 storage_->decoded.append(text_.substr(run, offset_ - run));
+                const std::size_t escape = offset_;
                 ++offset_;
-                if (auto escape = read_escape(); !escape) {
-                    return escape;
+                const auto unit = read_escape();
+                if (!unit) {
+                    return std::unexpected(unit.error());
+                }
+                if (auto appended = append_escape({.unit = *unit, .offset = escape}, high);
+                    !appended) {
+                    return appended;
                 }
                 run = offset_;
-            } else if (static_cast<unsigned char>(c) < 0x20) {
-                return fail(SyntaxErrorCode::control_character_in_string);
-            } else {
-                ++offset_;
+                continue;
             }
+            // Whatever follows a high surrogate escape is read by its own rules first, as an
+            // escape is, and only then found not to be the low surrogate escape it needs.
+            std::size_t length = 1;
+            if (c != '"') {
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    return fail(SyntaxErrorCode::control_character_in_string);
+                }
+                length = utf8_sequence_length(text_, offset_);
+                if (length == 0) {
+                    return fail(SyntaxErrorCode::invalid_utf8);
+                }
+            }
+            if (high) {
+                return fail_at(SyntaxErrorCode::unpaired_surrogate, high->offset);
+            }
+            if (c == '"') {
+                break;
+            }
+            offset_ += length;
         }
 
         detail::Node node{.kind = Kind::string, .escaped = escaped, .offset = offset};
@@ -337,8 +439,19 @@ class Parser {
         return {};
     }
 
-    /// Reads an escape after its backslash, decoding it onto the decoded strings.
-    std::expected<void, SyntaxError> read_escape() {
+    /// An escape in a string, read.
+    struct Escape {
+        /// The UTF-16 code unit it stands for.
+        std::uint32_t unit;
+
+        /// Where it begins: its backslash.
+        std::size_t offset;
+    };
+
+    /// Reads an escape after its backslash.
+    ///
+    /// \return The UTF-16 code unit it stands for.
+    std::expected<std::uint32_t, SyntaxError> read_escape() {
         if (at_end()) {
             return fail(SyntaxErrorCode::unterminated_string);
         }
@@ -366,19 +479,19 @@ class Parser {
             break;
         case 'u':
             ++offset_;
-            return read_unicode_escape();
+            return read_hex_digits();
         default:
             return fail(SyntaxErrorCode::invalid_escape);
         }
         ++offset_;
-        storage_->decoded.push_back(character);
-        return {};
+        return static_cast<std::uint32_t>(character);
     }
 
-    /// Reads the four hexadecimal digits of a `\u` escape, and the escape after it when the two
-    /// are a surrogate pair, decoding the code point they stand for onto the decoded strings.
-    std::expected<void, SyntaxError> read_unicode_escape() {
-        std::uint32_t code_point = 0;
+    /// Reads the four hexadecimal digits of a `\u` escape.
+    ///
+    /// \return The code unit they give.
+    std::expected<std::uint32_t, SyntaxError> read_hex_digits() {
+        std::uint32_t unit = 0;
         for (std::size_t digit = 0; digit < 4; ++digit) {
             if (at_end()) {
                 return fail(SyntaxErrorCode::unterminated_string);
@@ -387,17 +500,32 @@ class Parser {
             if (!value) {
                 return fail(SyntaxErrorCode::invalid_escape);
             }
-            code_point = (code_point << 4U) | *value;
+            unit = (unit << 4U) | *value;
             ++offset_;
         }
-        if (is_high_surrogate(code_point) && text_.substr(offset_, 2) == "\\u") {
-            const std::optional<std::uint32_t> low = hex_number(text_.substr(offset_ + 2, 4));
-            if (low && is_low_surrogate(*low)) {
-                code_point = 0x10000 + ((code_point - 0xD800) << 10U) + (*low - 0xDC00);
-                offset_ += 6;
+        return unit;
+    }
+
+    /// Writes the code unit of an escape onto the decoded strings in UTF-8, pairing a high
+    /// surrogate with the low one after it into the one code point they stand for together.
+    ///
+    /// \param escape The escape.
+    /// \param high The high surrogate escape before it that waits for its pair, if any. A high
+    ///             surrogate is left here to wait, and a completed pair clears it.
+    std::expected<void, SyntaxError> append_escape(Escape escape, std::optional<Escape>& high) {
+        if (high) {
+            if (!is_low_surrogate(escape.unit)) {
+                return fail_at(SyntaxErrorCode::unpaired_surrogate, high->offset);
             }
+            append_utf8(0x10000 + ((high->unit - 0xD800) << 10U) + (escape.unit - 0xDC00));
+            high.reset();
+        } else if (is_high_surrogate(escape.unit)) {
+            high = escape;
+        } else if (is_low_surrogate(escape.unit)) {
+            return fail_at(SyntaxErrorCode::unpaired_surrogate, escape.offset);
+        } else {
+            append_utf8(escape.unit);
         }
-        append_utf8(code_point);
         return {};
     }
 
@@ -412,22 +540,6 @@ class Parser {
             return static_cast<std::uint32_t>(c - 'A' + 10);
         }
         return std::nullopt;
-    }
-
-    /// The value of exactly four hexadecimal digits.
-    [[nodiscard]] static std::optional<std::uint32_t> hex_number(std::string_view digits) noexcept {
-        if (digits.size() != 4) {
-            return std::nullopt;
-        }
-        std::uint32_t number = 0;
-        for (const char c : digits) {
-            const std::optional<std::uint32_t> value = hex_digit(c);
-            if (!value) {
-                return std::nullopt;
-            }
-            number = (number << 4U) | *value;
-        }
-        return number;
     }
 
     [[nodiscard]] static bool is_high_surrogate(std::uint32_t unit) noexcept {
@@ -486,6 +598,7 @@ class Parser {
 
     std::unique_ptr<detail::Storage> storage_;
     std::string_view text_;
+    ParseOptions options_;
 
     /// The offset of the next byte to read.
     std::size_t offset_ = 0;
@@ -500,8 +613,8 @@ class Parser {
 
 } // namespace
 
-std::expected<Document, SyntaxError> parse(std::string text, ParseOptions /*options*/) {
-    auto storage = Parser{std::move(text)}.run();
+std::expected<Document, SyntaxError> parse(std::string text, ParseOptions options) {
+    auto storage = Parser{std::move(text), options}.run();
     if (!storage) {
         return std::unexpected(storage.error());
     }
