@@ -1,1 +1,3 @@
 * text=auto eol=lf
+# Test texts that must keep every byte, some of them deliberately not UTF-8.
+tests/JSONTestSuite/test_parsing/*.json -text

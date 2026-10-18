@@ -84,6 +84,11 @@ as follows:
 - An object keeps every member, duplicate names included, and leaves it to the caller whether a
   duplicate is an error.
 
+[JSONTestSuite](https://github.com/nst/JSONTestSuite)'s parsing tests prove these rules: every
+text it says is JSON is read, every text it says isn't is rejected, and each of the texts whose
+outcome it leaves to the parser has a row in a table in `tests/json_test_suite_tests.cpp`, giving
+pedantjson's outcome and the reason for it.
+
 ## Requirements
 
 - A C++23 compiler and standard library with `std::expected`. CI builds with GCC 16 so far; the
@@ -147,6 +152,12 @@ The presets take Catch2 from the vcpkg manifest, with `VCPKG_ROOT` naming a clon
 - `CODING_STANDARDS.md` says how the code is written, tested and committed.
 - `tests/consumers/` builds a small program against the installed package, through pkg-config, and
   as a subproject.
+
+## Acknowledgements
+
+The tests include the parsing tests of [JSONTestSuite](https://github.com/nst/JSONTestSuite), by
+Nicolas Seriot, under the MIT licence. They are copied unchanged into `tests/JSONTestSuite/`, with
+that licence beside them.
 
 ## Licence
 
