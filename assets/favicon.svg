@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" role="img" aria-labelledby="title" shape-rendering="crispEdges">
+<title id="title">pedantjson</title>
+<style>.ink{fill:#16181D}@media (prefers-color-scheme: dark){.ink{fill:#F2F3F0}}</style>
+<path class="ink" d="M3 2h1v4h-1zM4 2h2v1h-2zM2 6h1v1h-1zM1 7h1v2h-1zM2 9h1v1h-1zM3 10h1v4h-1zM4 13h2v1h-2zM12 2h1v4h-1zM10 2h2v1h-2zM13 6h1v1h-1zM14 7h1v2h-1zM13 9h1v1h-1zM12 10h1v4h-1zM10 13h2v1h-2z"/>
+<rect x="7" y="7" width="2" height="2" fill="#D63B30"/>
+</svg>
