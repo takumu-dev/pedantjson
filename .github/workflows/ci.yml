@@ -1,0 +1,58 @@
+# Builds and tests every pull request and every push to main and develop. The `ci` job is the one
+# check that branch protection requires, and it passes only when every other job has.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  gcc-release:
+    name: GCC 16, release
+    runs-on: ubuntu-24.04
+    container: gcc:16
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      VCPKG_ROOT: /opt/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: /opt/vcpkg-cache
+    steps:
+      - name: Install the build tools
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends \
+            ca-certificates cmake curl git ninja-build pkgconf tar unzip zip
+
+      - uses: actions/checkout@v7
+
+      - name: Restore the vcpkg binary cache
+        uses: actions/cache@v6
+        with:
+          path: /opt/vcpkg-cache
+          key: vcpkg-gcc-16-${{ hashFiles('vcpkg.json') }}
+
+      - name: Set up vcpkg
+        run: |
+          git clone --quiet https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+
+      - name: Build and test
+        run: cmake --workflow --preset gcc-release
+
+      - name: Build and test, with the library built without exceptions
+        run: cmake --workflow --preset gcc-noexcept
+
+  ci:
+    name: ci
+    if: always()
+    needs: [gcc-release]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check that every job passed
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: echo "$RESULTS" | jq --exit-status 'all(. == "success")'
