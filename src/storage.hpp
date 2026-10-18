@@ -70,8 +70,8 @@ struct Storage {
 
     /// The characters of a number or a string.
     [[nodiscard]] std::string_view characters(const Node& node) const noexcept {
-        const std::string_view source = node.escaped ? decoded : text;
-        return source.substr(node.first, node.size);
+        const std::string_view from = node.escaped ? decoded : text;
+        return from.substr(node.first, node.size);
     }
 };
 
