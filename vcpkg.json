@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "pedantjson",
+  "description": "A strict JSON reader that puts a position on every key and value",
+  "homepage": "https://github.com/takumu-dev/pedantjson",
+  "license": "Zlib",
+  "builtin-baseline": "bf19794383e8fb95eba5aa553235bc8ec2271688",
+  "dependencies": [],
+  "features": {
+    "tests": {
+      "description": "What pedantjson's tests need, and nothing a project using it ships",
+      "dependencies": [
+        {
+          "name": "catch2",
+          "version>=": "3.0.1"
+        }
+      ]
+    }
+  }
+}
