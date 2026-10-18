@@ -120,13 +120,9 @@ cmake --workflow --preset gcc-debug
 The presets take Catch2 from the vcpkg manifest, with `VCPKG_ROOT` naming a clone of
 [vcpkg](https://vcpkg.io), and build with Ninja. Warnings are errors in every preset.
 
-- Tests come first, and use the public header only. Each test's name is a sentence saying what
-  holds. `tests/consumers/` builds a small program against the installed package, through
-  pkg-config, and as a subproject.
-- `clang-format` decides the layout, and the library's code follows the checks in `.clang-tidy`.
-- Every public declaration has a Doxygen comment.
-- Commit subjects follow [Conventional Commits](https://www.conventionalcommits.org), and branches
-  follow git flow: work happens on `feature/<name>` from `develop`, and `main` holds releases only.
+- `CODING_STANDARDS.md` says how the code is written, tested and committed.
+- `tests/consumers/` builds a small program against the installed package, through pkg-config, and
+  as a subproject.
 
 ## Licence
 

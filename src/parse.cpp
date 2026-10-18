@@ -53,17 +53,17 @@ class Parser {
     }
 
   private:
-    [[nodiscard]] bool at_end() const noexcept { return position_ == text_.size(); }
+    [[nodiscard]] bool at_end() const noexcept { return offset_ == text_.size(); }
 
-    /// The character at the current position, which must not be the end.
+    /// The character at the current offset, which must not be the end.
     [[nodiscard]] char peek() const {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): see above
-        return text_[position_];
+        return text_[offset_];
     }
 
-    /// The error of the given kind at the current position.
+    /// The error of the given kind at the current offset.
     [[nodiscard]] std::unexpected<SyntaxError> fail(SyntaxErrorCode code) const noexcept {
-        return std::unexpected(SyntaxError{.code = code, .offset = position_});
+        return std::unexpected(SyntaxError{.code = code, .offset = offset_});
     }
 
     void skip_whitespace() noexcept {
@@ -72,13 +72,13 @@ class Parser {
             if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
                 return;
             }
-            ++position_;
+            ++offset_;
         }
     }
 
-    /// Adds a node that begins at the current position.
+    /// Adds a node that begins at the current offset.
     detail::Node& add_node(Kind kind) {
-        return storage_->nodes.emplace_back(detail::Node{.kind = kind, .offset = position_});
+        return storage_->nodes.emplace_back(detail::Node{.kind = kind, .offset = offset_});
     }
 
     [[nodiscard]] static char closing_bracket(Kind kind) noexcept {
@@ -105,7 +105,7 @@ class Parser {
         open(kind);
         skip_whitespace();
         if (!at_end() && peek() == closing_bracket(kind)) {
-            ++position_;
+            ++offset_;
             return close();
         }
         if (kind == Kind::object) {
@@ -131,7 +131,7 @@ class Parser {
                 return fail(SyntaxErrorCode::unexpected_end);
             }
             if (peek() == ',') {
-                ++position_;
+                ++offset_;
                 if (kind == Kind::object) {
                     if (auto name = read_name(); !name) {
                         return std::unexpected(name.error());
@@ -142,7 +142,7 @@ class Parser {
             if (peek() != closing_bracket(kind)) {
                 return fail(SyntaxErrorCode::unexpected_character);
             }
-            ++position_;
+            ++offset_;
             completed = close();
         }
         skip_whitespace();
@@ -172,7 +172,7 @@ class Parser {
         if (peek() != ':') {
             return fail(SyntaxErrorCode::unexpected_character);
         }
-        ++position_;
+        ++offset_;
         return {};
     }
 
@@ -181,7 +181,7 @@ class Parser {
         frames_.push_back(
             Frame{.node = storage_->nodes.size(), .kind = kind, .first_pending = pending_.size()});
         add_node(kind);
-        ++position_;
+        ++offset_;
     }
 
     /// Closes the innermost array or object, after its closing bracket, moving its children from
@@ -237,26 +237,26 @@ class Parser {
 
     /// Reads a number, keeping its text.
     std::expected<void, SyntaxError> read_number() {
-        const std::size_t first = position_;
+        const std::size_t first = offset_;
         if (peek() == '-') {
-            ++position_;
+            ++offset_;
         }
         // The integer part is a lone zero, or digits that don't begin with one.
         if (!at_end() && peek() == '0') {
-            ++position_;
+            ++offset_;
         } else if (auto digits = read_digits(); !digits) {
             return digits;
         }
         if (!at_end() && peek() == '.') {
-            ++position_;
+            ++offset_;
             if (auto digits = read_digits(); !digits) {
                 return digits;
             }
         }
         if (!at_end() && (peek() == 'e' || peek() == 'E')) {
-            ++position_;
+            ++offset_;
             if (!at_end() && (peek() == '+' || peek() == '-')) {
-                ++position_;
+                ++offset_;
             }
             if (auto digits = read_digits(); !digits) {
                 return digits;
@@ -271,7 +271,7 @@ class Parser {
             }
         }
         storage_->nodes.push_back(detail::Node{
-            .kind = Kind::number, .offset = first, .first = first, .size = position_ - first});
+            .kind = Kind::number, .offset = first, .first = first, .size = offset_ - first});
         return {};
     }
 
@@ -284,7 +284,7 @@ class Parser {
             return fail(SyntaxErrorCode::invalid_number);
         }
         while (!at_end() && is_digit(peek())) {
-            ++position_;
+            ++offset_;
         }
         return {};
     }
@@ -294,12 +294,12 @@ class Parser {
     /// A string without escapes stays in the text. One with escapes is decoded into the storage's
     /// decoded strings, the plain runs between its escapes copied as they are.
     std::expected<void, SyntaxError> read_string() {
-        const std::size_t offset = position_;
-        ++position_;
+        const std::size_t offset = offset_;
+        ++offset_;
         const std::size_t decoded_first = storage_->decoded.size();
         bool escaped = false;
         // Where the characters not yet copied to the decoded strings begin.
-        std::size_t run = position_;
+        std::size_t run = offset_;
         while (true) {
             if (at_end()) {
                 return fail(SyntaxErrorCode::unterminated_string);
@@ -310,29 +310,29 @@ class Parser {
             }
             if (c == '\\') {
                 escaped = true;
-                storage_->decoded.append(text_.substr(run, position_ - run));
-                ++position_;
+                storage_->decoded.append(text_.substr(run, offset_ - run));
+                ++offset_;
                 if (auto escape = read_escape(); !escape) {
                     return escape;
                 }
-                run = position_;
+                run = offset_;
             } else if (static_cast<unsigned char>(c) < 0x20) {
                 return fail(SyntaxErrorCode::control_character_in_string);
             } else {
-                ++position_;
+                ++offset_;
             }
         }
 
         detail::Node node{.kind = Kind::string, .escaped = escaped, .offset = offset};
         if (escaped) {
-            storage_->decoded.append(text_.substr(run, position_ - run));
+            storage_->decoded.append(text_.substr(run, offset_ - run));
             node.first = decoded_first;
             node.size = storage_->decoded.size() - decoded_first;
         } else {
             node.first = offset + 1;
-            node.size = position_ - node.first;
+            node.size = offset_ - node.first;
         }
-        ++position_;
+        ++offset_;
         storage_->nodes.push_back(node);
         return {};
     }
@@ -365,12 +365,12 @@ class Parser {
             character = '\t';
             break;
         case 'u':
-            ++position_;
+            ++offset_;
             return read_unicode_escape();
         default:
             return fail(SyntaxErrorCode::invalid_escape);
         }
-        ++position_;
+        ++offset_;
         storage_->decoded.push_back(character);
         return {};
     }
@@ -388,13 +388,13 @@ class Parser {
                 return fail(SyntaxErrorCode::invalid_escape);
             }
             code_point = (code_point << 4U) | *value;
-            ++position_;
+            ++offset_;
         }
-        if (is_high_surrogate(code_point) && text_.substr(position_, 2) == "\\u") {
-            const std::optional<std::uint32_t> low = hex_number(text_.substr(position_ + 2, 4));
+        if (is_high_surrogate(code_point) && text_.substr(offset_, 2) == "\\u") {
+            const std::optional<std::uint32_t> low = hex_number(text_.substr(offset_ + 2, 4));
             if (low && is_low_surrogate(*low)) {
                 code_point = 0x10000 + ((code_point - 0xD800) << 10U) + (*low - 0xDC00);
-                position_ += 6;
+                offset_ += 6;
             }
         }
         append_utf8(code_point);
@@ -467,12 +467,12 @@ class Parser {
             if (peek() != letter) {
                 return fail(SyntaxErrorCode::unexpected_character);
             }
-            ++position_;
+            ++offset_;
         }
         return {};
     }
 
-    /// An array or an object still open at the current position.
+    /// An array or an object still open at the current offset.
     struct Frame {
         /// Its node.
         std::size_t node;
@@ -486,9 +486,11 @@ class Parser {
 
     std::unique_ptr<detail::Storage> storage_;
     std::string_view text_;
-    std::size_t position_ = 0;
 
-    /// The arrays and objects open at the current position, the innermost last.
+    /// The offset of the next byte to read.
+    std::size_t offset_ = 0;
+
+    /// The arrays and objects open at the current offset, the innermost last.
     std::vector<Frame> frames_;
 
     /// The children read so far of every open array and object, those of the innermost last. An
