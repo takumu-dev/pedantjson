@@ -1,0 +1,158 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "description": "Every preset builds with Ninja and takes the tests' dependencies from vcpkg, found through VCPKG_ROOT.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "CMAKE_COMPILE_WARNING_AS_ERROR": true,
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "VCPKG_MANIFEST_FEATURES": "tests"
+      }
+    },
+    {
+      "name": "linux",
+      "hidden": true,
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "gcc",
+      "hidden": true,
+      "inherits": "linux",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "clang",
+      "hidden": true,
+      "inherits": "linux",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "debug",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "gcc-debug",
+      "inherits": ["gcc", "debug"],
+      "displayName": "GCC, debug"
+    },
+    {
+      "name": "gcc-release",
+      "inherits": ["gcc", "release"],
+      "displayName": "GCC, release"
+    },
+    {
+      "name": "gcc-noexcept",
+      "inherits": ["gcc", "release"],
+      "displayName": "GCC, release, library without exceptions",
+      "description": "The library builds with exceptions disabled, as a project might build it. The tests keep exceptions for Catch2.",
+      "cacheVariables": {
+        "PEDANTJSON_EXCEPTIONS": false
+      }
+    },
+    {
+      "name": "clang-debug",
+      "inherits": ["clang", "debug"],
+      "displayName": "Clang, debug"
+    },
+    {
+      "name": "clang-release",
+      "inherits": ["clang", "release"],
+      "displayName": "Clang, release"
+    }
+  ],
+  "buildPresets": [
+    { "name": "gcc-debug", "configurePreset": "gcc-debug" },
+    { "name": "gcc-release", "configurePreset": "gcc-release" },
+    { "name": "gcc-noexcept", "configurePreset": "gcc-noexcept" },
+    { "name": "clang-debug", "configurePreset": "clang-debug" },
+    { "name": "clang-release", "configurePreset": "clang-release" }
+  ],
+  "testPresets": [
+    {
+      "name": "test",
+      "hidden": true,
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    { "name": "gcc-debug", "inherits": "test", "configurePreset": "gcc-debug" },
+    { "name": "gcc-release", "inherits": "test", "configurePreset": "gcc-release" },
+    { "name": "gcc-noexcept", "inherits": "test", "configurePreset": "gcc-noexcept" },
+    { "name": "clang-debug", "inherits": "test", "configurePreset": "clang-debug" },
+    { "name": "clang-release", "inherits": "test", "configurePreset": "clang-release" }
+  ],
+  "workflowPresets": [
+    {
+      "name": "gcc-debug",
+      "steps": [
+        { "type": "configure", "name": "gcc-debug" },
+        { "type": "build", "name": "gcc-debug" },
+        { "type": "test", "name": "gcc-debug" }
+      ]
+    },
+    {
+      "name": "gcc-release",
+      "steps": [
+        { "type": "configure", "name": "gcc-release" },
+        { "type": "build", "name": "gcc-release" },
+        { "type": "test", "name": "gcc-release" }
+      ]
+    },
+    {
+      "name": "gcc-noexcept",
+      "steps": [
+        { "type": "configure", "name": "gcc-noexcept" },
+        { "type": "build", "name": "gcc-noexcept" },
+        { "type": "test", "name": "gcc-noexcept" }
+      ]
+    },
+    {
+      "name": "clang-debug",
+      "steps": [
+        { "type": "configure", "name": "clang-debug" },
+        { "type": "build", "name": "clang-debug" },
+        { "type": "test", "name": "clang-debug" }
+      ]
+    },
+    {
+      "name": "clang-release",
+      "steps": [
+        { "type": "configure", "name": "clang-release" },
+        { "type": "build", "name": "clang-release" },
+        { "type": "test", "name": "clang-release" }
+      ]
+    }
+  ]
+}

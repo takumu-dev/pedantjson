@@ -1,0 +1,28 @@
+---
+# LLVM's style, with wider indents and lines, and includes grouped as: the file's own header, this
+# project's headers, third-party headers, then the standard library.
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 100
+PointerAlignment: Left
+QualifierAlignment: Left
+InsertBraces: true
+SeparateDefinitionBlocks: Always
+InsertNewlineAtEOF: true
+
+IncludeBlocks: Regroup
+# A test file's own header is the one it is named after, as foo_tests.cpp is after foo.hpp.
+IncludeIsMainRegex: '(_tests)?$'
+MainIncludeChar: Any
+IncludeCategories:
+  # This project's headers, public or private. Naming the project here is the one line that differs
+  # between projects sharing this file.
+  - Regex: '^("|<pedantjson/)'
+    Priority: 1
+  # The standard library: a bare name in angle brackets.
+  - Regex: '^<[[:alnum:]_]+>$'
+    Priority: 3
+  # Everything else in angle brackets is a third-party library.
+  - Regex: '^<'
+    Priority: 2
+...

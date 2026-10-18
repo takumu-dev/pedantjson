@@ -1,0 +1,7 @@
+# The pedantjson package. `find_package(pedantjson)` gives the target pedantjson::pedantjson.
+
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/pedantjson-targets.cmake")
+
+check_required_components(pedantjson)
