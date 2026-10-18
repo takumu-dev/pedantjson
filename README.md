@@ -1,4 +1,9 @@
-# pedantjson
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/pedantjson-logo-dark.svg">
+    <img src="assets/pedantjson-logo.svg" alt="pedantjson" width="340">
+  </picture>
+</h1>
 
 pedantjson is a strict JSON reader for C++23. It reads a text into an immutable tree that
 remembers where everything came from: every key and every value carries the byte offset where it
@@ -158,6 +163,9 @@ The presets take Catch2 from the vcpkg manifest, with `VCPKG_ROOT` naming a clon
 The tests include the parsing tests of [JSONTestSuite](https://github.com/nst/JSONTestSuite), by
 Nicolas Seriot, under the MIT licence. They are copied unchanged into `tests/JSONTestSuite/`, with
 that licence beside them.
+
+The logo's wordmark and the social preview's tagline are drawn from
+[IBM Plex Mono](https://github.com/IBM/plex), under the SIL Open Font License.
 
 ## Licence
 
