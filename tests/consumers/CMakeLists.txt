@@ -27,17 +27,21 @@ set_tests_properties("consumers: earlier installs and consumer builds are remove
 
 # Adds a test that builds the consumer project in `source_dir` and runs the program it builds.
 #
-#   INSTALLED  the consumer needs the installed library
-#   OPTIONS    more cache settings for the consumer
+#   INSTALLED   the consumer needs the installed library
+#   BUILD_NAME  the name of the consumer's build directory, `source_dir` by default
+#   OPTIONS     more cache settings for the consumer, which win over this build's
 function(pedantjson_add_consumer_test name source_dir)
-    cmake_parse_arguments(PARSE_ARGV 2 arg "INSTALLED" "" "OPTIONS")
+    cmake_parse_arguments(PARSE_ARGV 2 arg "INSTALLED" "BUILD_NAME" "OPTIONS")
     set(test_name "consumers: ${name}")
+    if(NOT DEFINED arg_BUILD_NAME)
+        set(arg_BUILD_NAME "${source_dir}")
+    endif()
     if(arg_INSTALLED)
         list(APPEND arg_OPTIONS "-DCMAKE_PREFIX_PATH=${prefix}")
     endif()
     add_test(NAME "${test_name}"
         COMMAND "${CMAKE_CTEST_COMMAND}"
-            --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/${source_dir}" "${builds}/${source_dir}"
+            --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/${source_dir}" "${builds}/${arg_BUILD_NAME}"
             --build-generator "${CMAKE_GENERATOR}"
             --build-makeprogram "${CMAKE_MAKE_PROGRAM}"
             --build-config $<CONFIG>
@@ -78,6 +82,41 @@ if(PEDANTJSON_INSTALL)
             pkg-config
             INSTALLED
         )
+    endif()
+
+    # A library that one of GCC and Clang builds links into a program that the other builds, on the
+    # same standard library, libstdc++, as a package manager's build of it may differ from the
+    # project's own compiler. The test runs where the other compiler is found, at its oldest version
+    # or newer. A build with the sanitizers is left out, since the two compilers' runtimes for them
+    # don't mix.
+    if(NOT CMAKE_CXX_FLAGS MATCHES "-fsanitize=|-stdlib=libc\\+\\+")
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            find_program(PEDANTJSON_OTHER_CXX_COMPILER NAMES clang++
+                DOC "The other of GCC and Clang, which builds a consumer of the installed library"
+            )
+            set(other_floor 19)
+        elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+            find_program(PEDANTJSON_OTHER_CXX_COMPILER NAMES g++
+                DOC "The other of GCC and Clang, which builds a consumer of the installed library"
+            )
+            set(other_floor 12)
+        endif()
+        if(PEDANTJSON_OTHER_CXX_COMPILER)
+            execute_process(COMMAND "${PEDANTJSON_OTHER_CXX_COMPILER}" -dumpversion
+                OUTPUT_VARIABLE other_version
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                RESULT_VARIABLE other_result
+            )
+            if(other_result EQUAL 0 AND other_version VERSION_GREATER_EQUAL other_floor)
+                pedantjson_add_consumer_test(
+                    "a project that the other of GCC and Clang builds links the installed library"
+                    installed
+                    INSTALLED
+                    BUILD_NAME installed-by-the-other-compiler
+                    OPTIONS "-DCMAKE_CXX_COMPILER=${PEDANTJSON_OTHER_CXX_COMPILER}"
+                )
+            endif()
+        endif()
     endif()
 endif()
 

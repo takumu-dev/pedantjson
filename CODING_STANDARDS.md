@@ -140,6 +140,11 @@ departs from them, it says so.
 - `tests/consumers/` builds a small program against the installed package, through pkg-config, and
   against the source tree as a subproject. Each run starts from an empty prefix and empty build
   trees, so that nothing an earlier run left can stand in for what this one should make.
+- A package manager may build the library with another compiler than the program's, so the
+  library that one of GCC and Clang builds must link into a program the other builds. Nothing it
+  defines for a program to call is a constrained template, since the two mangle a constraint into
+  an instantiation's name differently, and a consumer test builds the program with the other
+  compiler wherever one is found.
 
 ## Versions, commits and branches
 

@@ -209,7 +209,8 @@ std::string_view NumberError::message() const noexcept {
 
 bool Number::is_integer() const noexcept { return integer_digits(parts_of(text_)).has_value(); }
 
-template <NumberType T> std::expected<T, NumberError> Number::to() const noexcept {
+template <typename T> std::expected<T, NumberError> Number::read() const noexcept {
+    static_assert(NumberType<T>, "a number reads only as a type that NumberType names");
     if constexpr (std::is_floating_point_v<T>) {
         return floating_point_of<T>(text_);
     } else {
@@ -217,18 +218,18 @@ template <NumberType T> std::expected<T, NumberError> Number::to() const noexcep
     }
 }
 
-template std::expected<signed char, NumberError> Number::to<signed char>() const noexcept;
-template std::expected<short, NumberError> Number::to<short>() const noexcept;
-template std::expected<int, NumberError> Number::to<int>() const noexcept;
-template std::expected<long, NumberError> Number::to<long>() const noexcept;
-template std::expected<long long, NumberError> Number::to<long long>() const noexcept;
-template std::expected<unsigned char, NumberError> Number::to<unsigned char>() const noexcept;
-template std::expected<unsigned short, NumberError> Number::to<unsigned short>() const noexcept;
-template std::expected<unsigned int, NumberError> Number::to<unsigned int>() const noexcept;
-template std::expected<unsigned long, NumberError> Number::to<unsigned long>() const noexcept;
+template std::expected<signed char, NumberError> Number::read<signed char>() const noexcept;
+template std::expected<short, NumberError> Number::read<short>() const noexcept;
+template std::expected<int, NumberError> Number::read<int>() const noexcept;
+template std::expected<long, NumberError> Number::read<long>() const noexcept;
+template std::expected<long long, NumberError> Number::read<long long>() const noexcept;
+template std::expected<unsigned char, NumberError> Number::read<unsigned char>() const noexcept;
+template std::expected<unsigned short, NumberError> Number::read<unsigned short>() const noexcept;
+template std::expected<unsigned int, NumberError> Number::read<unsigned int>() const noexcept;
+template std::expected<unsigned long, NumberError> Number::read<unsigned long>() const noexcept;
 template std::expected<unsigned long long, NumberError>
-Number::to<unsigned long long>() const noexcept;
-template std::expected<float, NumberError> Number::to<float>() const noexcept;
-template std::expected<double, NumberError> Number::to<double>() const noexcept;
+Number::read<unsigned long long>() const noexcept;
+template std::expected<float, NumberError> Number::read<float>() const noexcept;
+template std::expected<double, NumberError> Number::read<double>() const noexcept;
 
 } // namespace pedantjson

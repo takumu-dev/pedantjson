@@ -243,7 +243,8 @@ own, as `CODING_STANDARDS.md` describes.
 - `CHANGELOG.md` lists the changes in each release, and those not yet released, and
   `RELEASING.md` says how a release is made.
 - `tests/consumers/` builds a small program against the installed package, through pkg-config, and
-  as a subproject.
+  as a subproject. Where the other of GCC and Clang is found beside the build's compiler on
+  libstdc++, it builds the program with that one too, against the library this build made.
 - `ports/pedantjson/` is the vcpkg port, which downloads and builds the release it names. CI
   builds the same program through it, and through its portfile run on the checkout by
   `ci/checkout-port/`, so that each change is built with vcpkg before it is released.
