@@ -3,6 +3,10 @@ cmake_minimum_required(VERSION 3.28)
 
 project(pedantjson_subproject_consumer LANGUAGES CXX)
 
+# Like most projects, this one uses no C++ modules, so it isn't scanned for them, which with Clang
+# would take clang-scan-deps.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+
 set(PEDANTJSON_SOURCE_DIR "" CACHE PATH "pedantjson's source tree")
 add_subdirectory("${PEDANTJSON_SOURCE_DIR}" pedantjson)
 

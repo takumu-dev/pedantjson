@@ -1,6 +1,7 @@
 #include "support.hpp"
 #include <pedantjson/pedantjson.hpp>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -9,26 +10,21 @@
 
 using pedantjson::Kind;
 using pedantjson::SyntaxErrorCode;
+using support::byte_order_mark;
 using support::parsed;
+using support::required;
 using support::syntax_error;
 
-namespace {
-
-/// The byte-order mark, U+FEFF, in UTF-8.
-const std::string byte_order_mark = "\xef\xbb\xbf";
-
-} // namespace
-
 TEST_CASE("a byte-order mark at the start of the text is ignored", "[encoding]") {
-    const auto document = parsed(byte_order_mark + R"( {"a": 1})");
+    const auto document = parsed(byte_order_mark() + R"( {"a": 1})");
     CHECK(document.root().kind() == Kind::object);
     // Offsets still count from the start of the text, the mark included.
     CHECK(document.root().offset() == 4);
-    CHECK(document.root().as_object()->find("a")->key.offset() == 5);
+    CHECK(required(required(document.root().as_object()).find("a")).key.offset() == 5);
 }
 
 TEST_CASE("a text of a byte-order mark alone is empty input, at its end", "[encoding]") {
-    auto text = GENERATE(as<std::string>{}, byte_order_mark, byte_order_mark + " \n");
+    const auto text = GENERATE(as<std::string>{}, byte_order_mark(), byte_order_mark() + " \n");
     CAPTURE(text);
     const auto error = syntax_error(text);
     CHECK(error.code == SyntaxErrorCode::empty_input);
@@ -38,10 +34,10 @@ TEST_CASE("a text of a byte-order mark alone is empty input, at its end", "[enco
 TEST_CASE("a byte-order mark anywhere but the start is a character JSON doesn't allow there",
           "[encoding]") {
     auto [text, code, offset] = GENERATE(table<std::string, SyntaxErrorCode, std::size_t>({
-        {" " + byte_order_mark + "1", SyntaxErrorCode::unexpected_character, 1},
-        {byte_order_mark + byte_order_mark + "1", SyntaxErrorCode::unexpected_character, 3},
-        {"[" + byte_order_mark + "1]", SyntaxErrorCode::unexpected_character, 1},
-        {"1" + byte_order_mark, SyntaxErrorCode::trailing_content, 1},
+        {" " + byte_order_mark() + "1", SyntaxErrorCode::unexpected_character, 1},
+        {byte_order_mark() + byte_order_mark() + "1", SyntaxErrorCode::unexpected_character, 3},
+        {"[" + byte_order_mark() + "1]", SyntaxErrorCode::unexpected_character, 1},
+        {"1" + byte_order_mark(), SyntaxErrorCode::trailing_content, 1},
     }));
     CAPTURE(text);
     const auto error = syntax_error(text);
@@ -50,24 +46,24 @@ TEST_CASE("a byte-order mark anywhere but the start is a character JSON doesn't 
 }
 
 TEST_CASE("a byte-order mark in a string is a character of the string", "[encoding]") {
-    CHECK(parsed("\"" + byte_order_mark + "\"").root().as_string() == byte_order_mark);
+    CHECK(parsed("\"" + byte_order_mark() + "\"").root().as_string() == byte_order_mark());
 }
 
 TEST_CASE("well-formed UTF-8 in a string stands for itself, at the edges of every range",
           "[encoding]") {
-    auto text = GENERATE(as<std::string>{},
-                         "\xc2\x80",         // U+0080
-                         "\xdf\xbf",         // U+07FF
-                         "\xe0\xa0\x80",     // U+0800
-                         "\xec\xbf\xbf",     // U+CFFF
-                         "\xed\x80\x80",     // U+D000
-                         "\xed\x9f\xbf",     // U+D7FF, below the surrogates
-                         "\xee\x80\x80",     // U+E000, above them
-                         "\xef\xbf\xbf",     // U+FFFF
-                         "\xf0\x90\x80\x80", // U+10000
-                         "\xf3\xbf\xbf\xbf", // U+FFFFF
-                         "\xf4\x80\x80\x80", // U+100000
-                         "\xf4\x8f\xbf\xbf"  // U+10FFFF
+    const auto text = GENERATE(as<std::string>{},
+                               "\xc2\x80",         // U+0080
+                               "\xdf\xbf",         // U+07FF
+                               "\xe0\xa0\x80",     // U+0800
+                               "\xec\xbf\xbf",     // U+CFFF
+                               "\xed\x80\x80",     // U+D000
+                               "\xed\x9f\xbf",     // U+D7FF, below the surrogates
+                               "\xee\x80\x80",     // U+E000, above them
+                               "\xef\xbf\xbf",     // U+FFFF
+                               "\xf0\x90\x80\x80", // U+10000
+                               "\xf3\xbf\xbf\xbf", // U+FFFFF
+                               "\xf4\x80\x80\x80", // U+100000
+                               "\xf4\x8f\xbf\xbf"  // U+10FFFF
     );
     CAPTURE(text);
     CHECK(parsed("\"" + text + "\"").root().as_string() == text);

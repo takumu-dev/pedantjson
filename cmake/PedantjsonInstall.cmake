@@ -38,7 +38,11 @@ install(FILES
 if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}")
     set(PEDANTJSON_PC_PREFIX "${CMAKE_INSTALL_PREFIX}")
 else()
-    file(RELATIVE_PATH up "/${CMAKE_INSTALL_LIBDIR}/pkgconfig" "/")
+    # Measured from the configured prefix, which is a full path on every platform, as "/" isn't on
+    # Windows; only the way up from the file to the prefix matters.
+    file(RELATIVE_PATH up "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/pkgconfig"
+        "${CMAKE_INSTALL_PREFIX}"
+    )
     string(REGEX REPLACE "/$" "" up "${up}")
     set(PEDANTJSON_PC_PREFIX "\${pcfiledir}/${up}")
 endif()

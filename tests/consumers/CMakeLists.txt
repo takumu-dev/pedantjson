@@ -1,9 +1,20 @@
-# The ways in for a project: the installed package, through CMake or pkg-config, and the
-# subproject. Each consumer is a project of its own, which CTest configures, builds and runs with
-# this build's compiler and flags.
+# The ways in for a project: the installed package, through CMake or pkg-config, the subproject,
+# and the vcpkg port. Each consumer is a project of its own, which CTest configures, builds and
+# runs with this build's compiler and flags.
 
 set(prefix "${CMAKE_CURRENT_BINARY_DIR}/prefix")
 set(builds "${CMAKE_CURRENT_BINARY_DIR}/builds")
+
+# The flags of this build's type go too, since a preset may replace the defaults, as MSVC's with
+# AddressSanitizer keeps assertions on in an optimised build.
+set(config_flags "")
+if(CMAKE_BUILD_TYPE)
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" config)
+    set(config_flags
+        "-DCMAKE_CXX_FLAGS_${config}=${CMAKE_CXX_FLAGS_${config}}"
+        "-DCMAKE_EXE_LINKER_FLAGS_${config}=${CMAKE_EXE_LINKER_FLAGS_${config}}"
+    )
+endif()
 
 # Every run starts from nothing, so that no file installed and no cache written by an earlier run
 # can stand in for what this one should make.
@@ -35,6 +46,7 @@ function(pedantjson_add_consumer_test name source_dir)
                 "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
                 "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}"
                 "-DCMAKE_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
+                ${config_flags}
                 ${arg_OPTIONS}
             --test-command consumer
     )
@@ -71,4 +83,11 @@ endif()
 
 pedantjson_add_consumer_test("a project builds pedantjson as a subproject" subproject
     OPTIONS "-DPEDANTJSON_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+)
+
+add_test(NAME "consumers: the vcpkg port has the project's version"
+    COMMAND "${CMAKE_COMMAND}"
+        "-DMANIFEST=${PROJECT_SOURCE_DIR}/ports/pedantjson/vcpkg.json"
+        "-DVERSION=${PROJECT_VERSION}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/port_version.cmake"
 )

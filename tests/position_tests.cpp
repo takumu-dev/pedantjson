@@ -1,6 +1,7 @@
 #include "support.hpp"
 #include <pedantjson/pedantjson.hpp>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -10,14 +11,10 @@
 
 using pedantjson::Position;
 using pedantjson::SyntaxErrorCode;
+using support::byte_order_mark;
+using support::element;
 using support::parsed;
-
-namespace {
-
-/// The byte-order mark, U+FEFF, in UTF-8.
-const std::string byte_order_mark = "\xef\xbb\xbf";
-
-} // namespace
+using support::required;
 
 TEST_CASE("a position is a line and a column, each counting from 1", "[positions]") {
     const auto document = parsed(R"({
@@ -25,46 +22,45 @@ TEST_CASE("a position is a line and a column, each counting from 1", "[positions
     2]
 })");
     const auto root = document.root();
-    const auto a = root.as_object()->find("a");
-    REQUIRE(a.has_value());
-    const auto array = *a->value.as_array();
+    const auto a = required(required(root.as_object()).find("a"));
+    const auto array = required(a.value.as_array());
     CHECK(document.position(root.offset()) == Position{.line = 1, .column = 1});
-    CHECK(document.position(a->key.offset()) == Position{.line = 2, .column = 3});
-    CHECK(document.position(a->value.offset()) == Position{.line = 2, .column = 8});
-    CHECK(document.position(array[0].offset()) == Position{.line = 2, .column = 9});
-    CHECK(document.position(array[1].offset()) == Position{.line = 3, .column = 5});
+    CHECK(document.position(a.key.offset()) == Position{.line = 2, .column = 3});
+    CHECK(document.position(a.value.offset()) == Position{.line = 2, .column = 8});
+    CHECK(document.position(element(array, 0).offset()) == Position{.line = 2, .column = 9});
+    CHECK(document.position(element(array, 1).offset()) == Position{.line = 3, .column = 5});
 }
 
 TEST_CASE("a line ends at a line feed, a carriage return, or a carriage return and a line feed",
           "[positions]") {
     const auto document = parsed("[1,\n2,\r3,\r\n4,\n\r5,\r\r6]");
-    const auto array = *document.root().as_array();
+    const auto array = required(document.root().as_array());
     REQUIRE(array.size() == 6);
-    CHECK(document.position(array[0].offset()) == Position{.line = 1, .column = 2});
-    CHECK(document.position(array[1].offset()) == Position{.line = 2, .column = 1});
-    CHECK(document.position(array[2].offset()) == Position{.line = 3, .column = 1});
-    CHECK(document.position(array[3].offset()) == Position{.line = 4, .column = 1});
-    CHECK(document.position(array[4].offset()) == Position{.line = 6, .column = 1});
-    CHECK(document.position(array[5].offset()) == Position{.line = 8, .column = 1});
+    CHECK(document.position(element(array, 0).offset()) == Position{.line = 1, .column = 2});
+    CHECK(document.position(element(array, 1).offset()) == Position{.line = 2, .column = 1});
+    CHECK(document.position(element(array, 2).offset()) == Position{.line = 3, .column = 1});
+    CHECK(document.position(element(array, 3).offset()) == Position{.line = 4, .column = 1});
+    CHECK(document.position(element(array, 4).offset()) == Position{.line = 6, .column = 1});
+    CHECK(document.position(element(array, 5).offset()) == Position{.line = 8, .column = 1});
 }
 
 TEST_CASE("nothing in a string ends a line", "[positions]") {
     // An escaped line feed, and U+2028 LINE SEPARATOR, which a string may hold as it is.
     const auto document = parsed("[\"\\n\\r\", \"\xe2\x80\xa8\", 1]");
-    const auto array = *document.root().as_array();
+    const auto array = required(document.root().as_array());
     REQUIRE(array.size() == 3);
-    CHECK(document.position(array[2].offset()) == Position{.line = 1, .column = 15});
+    CHECK(document.position(element(array, 2).offset()) == Position{.line = 1, .column = 15});
 }
 
 TEST_CASE("a column counts code points, not bytes, and a tab as one", "[positions]") {
     // U+00E9, U+20AC and U+1F600 take two, three and four bytes.
     const std::string text = "[\"\xc3\xa9\",\t\"\xe2\x82\xac\xf0\x9f\x98\x80\", 1]";
     const auto document = parsed(text);
-    const auto array = *document.root().as_array();
+    const auto array = required(document.root().as_array());
     REQUIRE(array.size() == 3);
-    CHECK(array[2].offset() == 18);
-    CHECK(document.position(array[1].offset()) == Position{.line = 1, .column = 7});
-    CHECK(document.position(array[2].offset()) == Position{.line = 1, .column = 13});
+    CHECK(element(array, 2).offset() == 18);
+    CHECK(document.position(element(array, 1).offset()) == Position{.line = 1, .column = 7});
+    CHECK(document.position(element(array, 2).offset()) == Position{.line = 1, .column = 13});
 }
 
 TEST_CASE("an offset within a character is in that character's column", "[positions]") {
@@ -100,19 +96,19 @@ TEST_CASE("a syntax error carries the position of its offset", "[positions]") {
 }
 
 TEST_CASE("a byte-order mark takes no column", "[positions]") {
-    const auto document = parsed(byte_order_mark + "[1]");
+    const auto document = parsed(byte_order_mark() + "[1]");
     CHECK(document.position(document.root().offset()) == Position{.line = 1, .column = 1});
-    CHECK(document.position((*document.root().as_array())[0].offset()) ==
+    CHECK(document.position(element(required(document.root().as_array()), 0).offset()) ==
           Position{.line = 1, .column = 2});
     // An offset within the mark is before the first character.
     CHECK(document.position(0) == Position{.line = 1, .column = 1});
     CHECK(document.position(2) == Position{.line = 1, .column = 1});
 
-    const auto first = support::syntax_error(byte_order_mark + "?");
+    const auto first = support::syntax_error(byte_order_mark() + "?");
     CHECK(first.code == SyntaxErrorCode::unexpected_character);
     CHECK(first.offset == 3);
     CHECK(first.position == Position{.line = 1, .column = 1});
-    const auto second = support::syntax_error(byte_order_mark + "\n?");
+    const auto second = support::syntax_error(byte_order_mark() + "\n?");
     CHECK(second.code == SyntaxErrorCode::unexpected_character);
     CHECK(second.offset == 4);
     CHECK(second.position == Position{.line = 2, .column = 1});

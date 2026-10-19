@@ -1,6 +1,7 @@
 #include "support.hpp"
 #include <pedantjson/pedantjson.hpp>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -15,7 +16,7 @@ using support::parsed;
 using support::syntax_error;
 
 TEST_CASE("a text with no value is empty input, at its end", "[syntax errors]") {
-    auto text = GENERATE(as<std::string>{}, "", " ", "\t\n\r ");
+    const auto text = GENERATE(as<std::string>{}, "", " ", "\t\n\r ");
     CAPTURE(text);
     const auto error = syntax_error(text);
     CHECK(error.code == SyntaxErrorCode::empty_input);
@@ -92,7 +93,7 @@ TEST_CASE("every code has a message of its own", "[syntax errors]") {
         const std::string_view message =
             SyntaxError{.code = code, .offset = 0, .position = {}}.message();
         CAPTURE(code, message);
-        CHECK_FALSE(message.empty());
+        CHECK(!message.empty());
         messages.insert(message);
     }
     CHECK(messages.size() == codes.size());

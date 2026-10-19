@@ -1,6 +1,7 @@
 #include "support.hpp"
 #include <pedantjson/pedantjson.hpp>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -43,7 +44,7 @@ TEST_CASE("a misspelt literal is an unexpected character at its first wrong lett
 }
 
 TEST_CASE("a literal cut short by the end of the text is an unexpected end", "[literals]") {
-    auto text = GENERATE(as<std::string>{}, "t", "tru", "fals", "nul");
+    const auto text = GENERATE(as<std::string>{}, "t", "tru", "fals", "nul");
     CAPTURE(text);
     const auto error = syntax_error(text);
     CHECK(error.code == SyntaxErrorCode::unexpected_end);

@@ -54,3 +54,7 @@ endif()
 if(PEDANTJSON_INSTALL)
     include(PedantjsonInstall)
 endif()
+
+if(PROJECT_IS_TOP_LEVEL)
+    include(PedantjsonLint)
+endif()

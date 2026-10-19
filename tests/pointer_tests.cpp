@@ -1,6 +1,8 @@
-#include "support.hpp"
+// Catch2 prints pointers and their error codes as support.hpp registers them.
+#include "support.hpp" // IWYU pragma: keep
 #include <pedantjson/pedantjson.hpp>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -86,7 +88,7 @@ TEST_CASE("reading a pointer's text gives the pointer that writes it", "[pointer
 }
 
 TEST_CASE("a text that isn't empty and doesn't begin with a slash isn't a pointer", "[pointers]") {
-    auto text = GENERATE(as<std::string>{}, "a", "0", "a/b", " /a", "#/a", "#", "~0");
+    const auto text = GENERATE(as<std::string>{}, "a", "0", "a/b", " /a", "#/a", "#", "~0");
     CAPTURE(text);
     const auto read = Pointer::parse(text);
     REQUIRE_FALSE(read.has_value());

@@ -1,6 +1,7 @@
 #include "support.hpp"
 #include <pedantjson/pedantjson.hpp>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -10,6 +11,7 @@
 using pedantjson::Document;
 using pedantjson::Pointer;
 using support::parsed;
+using support::required;
 
 namespace {
 
@@ -22,11 +24,7 @@ Pointer parsed_pointer(const std::string& text) {
 
 /// The text of the number that a pointer names in a document, which must have one there.
 std::string_view number_at(const Document& document, const Pointer& pointer) {
-    const auto found = document.find(pointer);
-    REQUIRE(found.has_value());
-    const auto number = found->as_number();
-    REQUIRE(number.has_value());
-    return number->text();
+    return required(required(document.find(pointer)).as_number()).text();
 }
 
 } // namespace
@@ -46,15 +44,10 @@ TEST_CASE("finding a pointer answers the value it names, as RFC 6901's examples 
       "m~n": 8
    })");
 
-    const auto whole = document.find(Pointer{});
-    REQUIRE(whole.has_value());
-    CHECK(whole->offset() == document.root().offset());
-    const auto foo = document.find(parsed_pointer("/foo"));
-    REQUIRE(foo.has_value());
-    CHECK(foo->as_array()->size() == 2);
-    const auto bar = document.find(parsed_pointer("/foo/0"));
-    REQUIRE(bar.has_value());
-    CHECK(bar->as_string() == "bar");
+    CHECK(required(document.find(Pointer{})).offset() == document.root().offset());
+    const auto foo = required(document.find(parsed_pointer("/foo")));
+    CHECK(required(foo.as_array()).size() == 2);
+    CHECK(required(document.find(parsed_pointer("/foo/0"))).as_string() == "bar");
 
     auto [text, number] = GENERATE(table<std::string, std::string>({
         {"/", "0"},
@@ -73,7 +66,7 @@ TEST_CASE("finding a pointer answers the value it names, as RFC 6901's examples 
 
 TEST_CASE("finding a pointer the document has no value for answers nothing", "[lookup]") {
     const auto document = parsed(R"({"foo": ["bar", "baz"], "a/b": 1, "n": null})");
-    auto text =
+    const auto text =
         GENERATE(as<std::string>{}, "/bar", "/Foo", "/foo/2", "/foo/-", "/foo/01", "/foo/00",
                  "/foo/+1", "/foo/-1", "/foo/1e0", "/foo/ 1", "/foo/1 ", "/foo/x", "/foo/",
                  "/foo/0/x", "/foo/0/0", "/foo/18446744073709551616",
@@ -87,9 +80,7 @@ TEST_CASE("an index names an element of an array, and a name of digits a member 
     const auto document = parsed(R"({"0": [[1, 2], [3]], "1": true})");
     CHECK(number_at(document, Pointer{} / 0 / 1 / 0) == "3");
     CHECK(number_at(document, Pointer{} / 0 / 0 / 1) == "2");
-    const auto one = document.find(Pointer{} / "1");
-    REQUIRE(one.has_value());
-    CHECK(one->as_bool() == true);
+    CHECK(required(document.find(Pointer{} / "1")).as_bool() == true);
 }
 
 TEST_CASE("each escape in a pointer is decoded once, so ~01 names a tilde and a 1", "[lookup]") {
@@ -130,9 +121,8 @@ TEST_CASE("the nearest value of a pointer is the deepest on its way that the doc
         {"/missing/deeper/still", ""},
     }));
     CAPTURE(text);
-    const auto expected = document.find(parsed_pointer(nearest));
-    REQUIRE(expected.has_value());
-    CHECK(document.nearest(parsed_pointer(text)).offset() == expected->offset());
+    const auto expected = required(document.find(parsed_pointer(nearest)));
+    CHECK(document.nearest(parsed_pointer(text)).offset() == expected.offset());
 }
 
 TEST_CASE("a pointer through a repeated name is nearest the first member's value", "[lookup]") {

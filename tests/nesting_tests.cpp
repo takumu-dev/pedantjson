@@ -1,6 +1,7 @@
 #include "support.hpp"
 #include <pedantjson/pedantjson.hpp>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -11,6 +12,7 @@ using pedantjson::Kind;
 using pedantjson::ParseOptions;
 using pedantjson::SyntaxErrorCode;
 using support::parsed;
+using support::required;
 using support::syntax_error;
 
 namespace {
@@ -54,7 +56,8 @@ TEST_CASE("an array or an object deeper than the limit is too deep, at its openi
 
 TEST_CASE("the depth is the number of arrays and objects open, siblings not counted", "[nesting]") {
     const ParseOptions two{.max_depth = 2};
-    CHECK(parsed(R"([[1], {"a": 2}, [], {}])", two).root().as_array()->size() == 4);
+    const auto document = parsed(R"([[1], {"a": 2}, [], {}])", two);
+    CHECK(required(document.root().as_array()).size() == 4);
 
     auto [text, offset] = GENERATE(table<std::string, std::size_t>({
         {"[[[]]]", 2},
