@@ -95,6 +95,7 @@ class Parser {
         if (text_.starts_with(byte_order_mark)) {
             offset_ = byte_order_mark.size();
         }
+        storage_->line_starts.push_back(offset_);
         skip_whitespace();
         if (at_end()) {
             return fail(SyntaxErrorCode::empty_input);
@@ -138,16 +139,23 @@ class Parser {
         if (offset < text_.size() && utf8_sequence_length(text_, offset) == 0) {
             code = SyntaxErrorCode::invalid_utf8;
         }
-        return std::unexpected(SyntaxError{.code = code, .offset = offset});
+        return std::unexpected(
+            SyntaxError{.code = code, .offset = offset, .position = storage_->position(offset)});
     }
 
-    void skip_whitespace() noexcept {
+    /// Skips whitespace, noting where each line after it begins. Only whitespace can end a line,
+    /// since a string can't hold a line feed or a carriage return unescaped.
+    void skip_whitespace() {
         while (!at_end()) {
             const char c = peek();
             if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
                 return;
             }
             ++offset_;
+            // A carriage return and a line feed together end one line.
+            if (c == '\n' || (c == '\r' && (at_end() || peek() != '\n'))) {
+                storage_->line_starts.push_back(offset_);
+            }
         }
     }
 

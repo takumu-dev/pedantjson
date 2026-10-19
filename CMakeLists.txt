@@ -31,6 +31,7 @@ target_sources(pedantjson
         src/document.cpp
         src/number.cpp
         src/parse.cpp
+        src/pointer.cpp
         src/storage.hpp
     PUBLIC
         FILE_SET HEADERS

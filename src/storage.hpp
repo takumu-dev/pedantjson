@@ -44,6 +44,9 @@ struct Storage {
     /// Every key and value, in the order of the text. The first is the root.
     std::vector<Node> nodes;
 
+    /// Where each line begins in the text, in order, the first line after any byte-order mark.
+    std::vector<std::size_t> line_starts;
+
     /// The indices into `nodes` of each array's elements, and of each object's keys and values in
     /// turn, contiguous for each array and object.
     std::vector<std::size_t> children;
@@ -67,6 +70,9 @@ struct Storage {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): see above
         return children[index];
     }
+
+    /// The line and the column of an offset in the text, from the lines read so far.
+    [[nodiscard]] Position position(std::size_t offset) const noexcept;
 
     /// The characters of a number or a string.
     [[nodiscard]] std::string_view characters(const Node& node) const noexcept {

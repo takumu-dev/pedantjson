@@ -39,9 +39,10 @@ struct Decision {
 /// The outcome of a text that is read as JSON.
 constexpr std::optional<SyntaxError> parses = std::nullopt;
 
-/// The outcome of a text that is rejected with the syntax error of `code` at `offset`.
+/// The outcome of a text that is rejected with the syntax error of `code` at `offset`, whatever its
+/// position.
 constexpr std::optional<SyntaxError> rejected(SyntaxErrorCode code, std::size_t offset) {
-    return SyntaxError{.code = code, .offset = offset};
+    return SyntaxError{.code = code, .offset = offset, .position = {}};
 }
 
 using enum SyntaxErrorCode;
