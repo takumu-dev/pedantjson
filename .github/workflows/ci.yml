@@ -391,22 +391,19 @@ jobs:
         run: ci/linux/install-tools.sh
 
       - name: Build the library and install it
-        run: |
-          cmake -S . -B build/library -G Ninja -DCMAKE_BUILD_TYPE=Release -DPEDANTJSON_BUILD_TESTS=OFF
-          cmake --build build/library
-          cmake --install build/library --prefix "$PWD/build/prefix"
+        run: cmake --workflow --preset library
 
       - name: Build and run a project that finds it with find_package
         run: |
           cmake -S tests/consumers/installed -B build/installed -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/build/prefix"
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/build/library/prefix"
           cmake --build build/installed
           build/installed/consumer
 
       - name: Build and run a project that finds it with pkg-config
         run: |
           cmake -S tests/consumers/pkg-config -B build/pkg-config -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/build/prefix"
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/build/library/prefix"
           cmake --build build/pkg-config
           build/pkg-config/consumer
 

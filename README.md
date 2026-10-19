@@ -208,6 +208,7 @@ cmake --workflow --preset gcc-debug
 | `msvc-asan` | MSVC, optimised with assertions kept on, with AddressSanitizer |
 | `msvc-noexcept` | MSVC, release, the library alone, built without exceptions |
 | `apple-clang-debug`, `apple-clang-release`, `apple-clang-noexcept` | Apple Clang, as for GCC |
+| `library` | The library alone, release, built without vcpkg and installed into `build/library/prefix` |
 | `tidy` | The library and the tests, with clang-tidy |
 | `format` | The formatting, checked with clang-format |
 | `docs` | The documentation of the public header, checked with Doxygen |
