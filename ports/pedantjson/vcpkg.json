@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "pedantjson",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A strict JSON reader that puts a position on every key and value",
   "homepage": "https://github.com/takumu-dev/pedantjson",
   "license": "Zlib",

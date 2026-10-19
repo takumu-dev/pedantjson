@@ -5,7 +5,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(pedantjson
-    VERSION 0.0.0
+    VERSION 0.1.0
     DESCRIPTION "A strict JSON reader that puts a position on every key and value"
     HOMEPAGE_URL "https://github.com/takumu-dev/pedantjson"
     LANGUAGES CXX
