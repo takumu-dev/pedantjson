@@ -30,3 +30,4 @@ pedantjson_target_warnings(pedantjson_tests)
 catch_discover_tests(pedantjson_tests)
 
 add_subdirectory(consumers)
+add_subdirectory(release)

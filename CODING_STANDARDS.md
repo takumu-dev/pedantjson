@@ -149,7 +149,8 @@ departs from them, it says so.
 - A change that a project using pedantjson would notice adds a line to the `Unreleased` section of
   `CHANGELOG.md`, in the branch that makes it, under the heading Keep a Changelog gives its kind:
   `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed` or `Security`. A release dates that section
-  and names it after its version.
+  and names it after its version, and a test checks that the changelog's newest release is the
+  project's version.
 - Commit subjects follow Conventional Commits, `type(scope)!: description`, with the type one of
   `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style` or `test`.
   The scope and the `!` of a breaking change are optional. A message describes the change and why.
