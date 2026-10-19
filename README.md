@@ -135,8 +135,21 @@ pedantjson's outcome and the reason for it.
 
 ## Requirements
 
-- A C++23 compiler and standard library with `std::expected`. CI builds with GCC 16 so far; the
-  oldest compilers pedantjson supports will be listed here once CI proves them.
+- A C++23 compiler and standard library with `std::expected`, and with `std::from_chars` for
+  floating-point numbers. pedantjson supports these, each from the oldest version CI builds and
+  tests it with on GitHub's runners, through to the newest release, which CI builds too:
+
+  | Compiler | Oldest version |
+  |---|---|
+  | GCC | 12 |
+  | Clang, with libstdc++ | 19, with the libstdc++ of GCC 12 or newer |
+  | Clang, with libc++ | 20 |
+  | MSVC | 14.44, from Visual Studio 2022 17.14 |
+  | Apple Clang | from Xcode 26.4 |
+
+  An oldest version rises only when no runner carries it any more, and a release that raises one
+  is a breaking change. Until MSVC 14.52, CMake builds C++23 with MSVC in its preview standard
+  mode.
 - CMake 3.28 or newer.
 - Nothing else: pedantjson uses the standard library alone. It never throws, and builds with
   exceptions enabled or disabled.
@@ -187,15 +200,30 @@ cmake --workflow --preset gcc-debug
 | Preset | Configuration |
 |---|---|
 | `gcc-debug`, `gcc-release` | GCC |
+| `gcc-sanitize` | GCC, debug, with AddressSanitizer and UndefinedBehaviorSanitizer |
 | `gcc-noexcept` | GCC, release, with the library built without exceptions |
-| `clang-debug`, `clang-release` | Clang |
+| `clang-debug`, `clang-release`, `clang-sanitize` | Clang with libstdc++, as for GCC |
+| `libcxx-debug`, `libcxx-release`, `libcxx-sanitize` | Clang with libc++, as for GCC |
+| `msvc-debug`, `msvc-release` | MSVC, from a developer command prompt |
+| `msvc-asan` | MSVC, debug, with AddressSanitizer |
+| `msvc-noexcept` | MSVC, release, the library alone, built without exceptions |
+| `apple-clang-debug`, `apple-clang-release`, `apple-clang-noexcept` | Apple Clang, as for GCC |
+| `tidy` | The library and the tests, with clang-tidy |
+| `format` | The formatting, checked with clang-format |
+| `docs` | The documentation of the public header, checked with Doxygen |
 
 The presets take Catch2 from the vcpkg manifest, with `VCPKG_ROOT` naming a clone of
 [vcpkg](https://vcpkg.io), and build with Ninja. Warnings are errors in every preset.
+Once the `format` preset is configured, `cmake --build --preset format --target format` formats
+every source in place.
 
 - `CODING_STANDARDS.md` says how the code is written, tested and committed.
 - `tests/consumers/` builds a small program against the installed package, through pkg-config, and
   as a subproject.
+- `ports/pedantjson/` is a vcpkg port that builds the source tree it sits in, through which CI
+  builds the same program with vcpkg.
+- `.github/workflows/ci.yml` builds and tests every pull request with each compiler above, at its
+  oldest version and its newest release.
 
 ## Acknowledgements
 
