@@ -1,15 +1,18 @@
 #include "support.hpp"
 #include <pedantjson/pedantjson.hpp>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
 #include <cstddef>
 #include <string>
+#include <utility>
 
 using pedantjson::Kind;
 using pedantjson::SyntaxErrorCode;
 using support::parsed;
+using support::required;
 using support::syntax_error;
 
 namespace {
@@ -19,8 +22,7 @@ std::string string_of(std::string text) {
     const auto document = parsed(std::move(text));
     const auto value = document.root();
     CHECK(value.kind() == Kind::string);
-    REQUIRE(value.as_string().has_value());
-    return std::string{*value.as_string()};
+    return std::string{required(value.as_string())};
 }
 
 } // namespace
@@ -127,8 +129,8 @@ TEST_CASE("escapes and plain characters mix in any order", "[strings]") {
 }
 
 TEST_CASE("a string still open at the end of the text is unterminated at the end", "[strings]") {
-    auto text = GENERATE(as<std::string>{}, R"(")", R"("abc)", R"("\")", R"("\)", R"("\u)",
-                         R"("\u12)", R"("\ud800)", R"("\ud800\u)");
+    const auto text = GENERATE(as<std::string>{}, R"(")", R"("abc)", R"("\")", R"("\)", R"("\u)",
+                               R"("\u12)", R"("\ud800)", R"("\ud800\u)");
     CAPTURE(text);
     const auto error = syntax_error(text);
     CHECK(error.code == SyntaxErrorCode::unterminated_string);

@@ -1,6 +1,7 @@
 #include "support.hpp"
 #include <pedantjson/pedantjson.hpp>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -10,6 +11,7 @@
 using pedantjson::Kind;
 using pedantjson::SyntaxErrorCode;
 using support::parsed;
+using support::required;
 using support::syntax_error;
 
 TEST_CASE("a number keeps the text it was written as", "[numbers]") {
@@ -20,8 +22,7 @@ TEST_CASE("a number keeps the text it was written as", "[numbers]") {
     const auto document = parsed(text);
     const auto value = document.root();
     CHECK(value.kind() == Kind::number);
-    REQUIRE(value.as_number().has_value());
-    CHECK(value.as_number()->text() == text);
+    CHECK(required(value.as_number()).text() == text);
 }
 
 TEST_CASE("a number begins at its sign or its first digit", "[numbers]") {
@@ -55,7 +56,7 @@ TEST_CASE("a number against the grammar is invalid at its first wrong character"
 }
 
 TEST_CASE("a number cut short by the end of the text is an unexpected end", "[numbers]") {
-    auto text = GENERATE(as<std::string>{}, "-", "1.", "1e", "1E+", "-1.5e-");
+    const auto text = GENERATE(as<std::string>{}, "-", "1.", "1e", "1E+", "-1.5e-");
     CAPTURE(text);
     const auto error = syntax_error(text);
     CHECK(error.code == SyntaxErrorCode::unexpected_end);
@@ -63,7 +64,7 @@ TEST_CASE("a number cut short by the end of the text is an unexpected end", "[nu
 }
 
 TEST_CASE("a number can't begin with a plus sign or a point, or be a word", "[numbers]") {
-    auto text = GENERATE(as<std::string>{}, "+1", ".5", "Infinity", "NaN");
+    const auto text = GENERATE(as<std::string>{}, "+1", ".5", "Infinity", "NaN");
     CAPTURE(text);
     const auto error = syntax_error(text);
     CHECK(error.code == SyntaxErrorCode::unexpected_character);

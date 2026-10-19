@@ -1,6 +1,7 @@
 #include "support.hpp"
 #include <pedantjson/pedantjson.hpp>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -20,6 +21,7 @@ using pedantjson::NumberErrorCode;
 using support::number_as;
 using support::number_error;
 using support::parsed;
+using support::required;
 
 namespace {
 
@@ -66,9 +68,7 @@ concept Readable = requires(const pedantjson::Number& number) { number.to<T>(); 
 
 TEST_CASE("an integer reads into an integer type", "[conversions]") {
     const auto document = parsed("42");
-    const auto number = document.root().as_number();
-    REQUIRE(number.has_value());
-    CHECK(number->to<int>() == 42);
+    CHECK(required(document.root().as_number()).to<int>() == 42);
 }
 
 TEMPLATE_LIST_TEST_CASE("an integer type reads every integer from its least to its greatest",
@@ -93,8 +93,8 @@ TEMPLATE_LIST_TEST_CASE("an integer beyond an integer type's limits is out of it
 
 TEMPLATE_LIST_TEST_CASE("zero reads into an integer type as zero, whatever its sign or exponent",
                         "[conversions]", IntegerTypes) {
-    auto text = GENERATE(as<std::string>{}, "0.0", "0e5", "0e-5", "0.000e-400", "-0", "-0.0",
-                         "-0e5", "-0.00E-5");
+    const auto text = GENERATE(as<std::string>{}, "0.0", "0e5", "0e-5", "0.000e-400", "-0", "-0.0",
+                               "-0e5", "-0.00E-5");
     CAPTURE(text);
     CHECK(number_as<TestType>(text) == TestType{0});
 }
@@ -126,9 +126,9 @@ TEST_CASE("a number written with a fraction or an exponent reads as an integer i
 
 TEMPLATE_LIST_TEST_CASE("a number whose value has a fraction isn't an integer", "[conversions]",
                         IntegerTypes) {
-    auto text = GENERATE(as<std::string>{}, "0.5", "1.5", "-1.5", "0.1", "1e-1", "150e-2",
-                         "1.0000000000000001", "9007199254740991.5", "1e-400", "5e-324",
-                         "123456789012345678901234567890.5", "-0.000001");
+    const auto text = GENERATE(as<std::string>{}, "0.5", "1.5", "-1.5", "0.1", "1e-1", "150e-2",
+                               "1.0000000000000001", "9007199254740991.5", "1e-400", "5e-324",
+                               "123456789012345678901234567890.5", "-0.000001");
     CAPTURE(text);
     CHECK(number_error<TestType>(text) == NumberErrorCode::not_an_integer);
 }
@@ -166,9 +166,10 @@ TEST_CASE("an integer written with an exponent is exact to the last digit", "[co
 
 TEMPLATE_LIST_TEST_CASE("an integer too large for any type is out of every integer type's range",
                         "[conversions]", IntegerTypes) {
-    auto text = GENERATE(as<std::string>{}, "1e400", "-1e400", "1.5e400", "1e99999999999999999999",
-                         "-1e99999999999999999999", "1e+99999999999999999999999999999999999999",
-                         "123456789012345678901234567890e10");
+    const auto text =
+        GENERATE(as<std::string>{}, "1e400", "-1e400", "1.5e400", "1e99999999999999999999",
+                 "-1e99999999999999999999", "1e+99999999999999999999999999999999999999",
+                 "123456789012345678901234567890e10");
     CAPTURE(text);
     CHECK(number_error<TestType>(text) == NumberErrorCode::out_of_range);
 }
@@ -205,9 +206,7 @@ TEST_CASE("a number says whether its value is an integer, whatever its size", "[
     }));
     CAPTURE(text);
     const auto document = parsed(text);
-    const auto number = document.root().as_number();
-    REQUIRE(number.has_value());
-    CHECK(number->is_integer() == integer);
+    CHECK(required(document.root().as_number()).is_integer() == integer);
 }
 
 TEST_CASE("a number reads into a floating-point type as the nearest value the type holds",
@@ -249,15 +248,16 @@ TEST_CASE(
     "its range",
     "[conversions]") {
     SECTION("float") {
-        auto text = GENERATE(as<std::string>{}, "3.4028236e38", "-3.4028236e38", "1e39", "1e-46",
-                             "-1e-46", "1e99999999999999999999", "1e-99999999999999999999");
+        const auto text =
+            GENERATE(as<std::string>{}, "3.4028236e38", "-3.4028236e38", "1e39", "1e-46", "-1e-46",
+                     "1e99999999999999999999", "1e-99999999999999999999");
         CAPTURE(text);
         CHECK(number_error<float>(text) == NumberErrorCode::out_of_range);
     }
     SECTION("double") {
-        auto text = GENERATE(as<std::string>{}, "1.7976931348623159e308", "-1.7976931348623159e308",
-                             "1e309", "2e-324", "-2e-324", "1e-400", "1e99999999999999999999",
-                             "1e-99999999999999999999");
+        const auto text = GENERATE(as<std::string>{}, "1.7976931348623159e308",
+                                   "-1.7976931348623159e308", "1e309", "2e-324", "-2e-324",
+                                   "1e-400", "1e99999999999999999999", "1e-99999999999999999999");
         CAPTURE(text);
         CHECK(number_error<double>(text) == NumberErrorCode::out_of_range);
     }
@@ -311,11 +311,11 @@ TEST_CASE("every number error code has a message of its own", "[conversions]") {
     for (const auto code : codes) {
         const std::string_view message = NumberError{.code = code}.message();
         CAPTURE(code, message);
-        CHECK_FALSE(message.empty());
+        CHECK(!message.empty());
         messages.insert(message);
     }
     CHECK(messages.size() == codes.size());
     const auto number = number_as<int>("1.5");
-    REQUIRE_FALSE(number.has_value());
+    REQUIRE(!number.has_value());
     CHECK(number.error().message() == "number not an integer");
 }

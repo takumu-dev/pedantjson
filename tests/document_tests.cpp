@@ -1,6 +1,7 @@
 #include "support.hpp"
 #include <pedantjson/pedantjson.hpp>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -11,7 +12,9 @@
 
 using pedantjson::Document;
 using pedantjson::Kind;
+using support::element;
 using support::parsed;
+using support::required;
 
 TEST_CASE("only the accessor of a value's own kind answers", "[documents]") {
     auto [text, kind] = GENERATE(table<std::string, Kind>({
@@ -45,12 +48,12 @@ TEST_CASE("handles into a document stay valid when the document moves", "[docume
     // A text this short sits inside a std::string itself, which a move would copy elsewhere.
     auto document = parsed(R"({"k":["s",1]})");
     const auto root = document.root();
-    const auto object = *root.as_object();
-    const auto member = object[0];
+    const auto object = required(root.as_object());
+    const auto member = support::member(object, 0);
     const std::string_view name = member.key.name();
-    const auto array = *member.value.as_array();
-    const std::string_view string = *array[0].as_string();
-    const auto number = *array[1].as_number();
+    const auto array = required(member.value.as_array());
+    const std::string_view string = required(element(array, 0).as_string());
+    const auto number = required(element(array, 1).as_number());
 
     Document moved = std::move(document);
     CHECK(root.kind() == Kind::object);
@@ -66,7 +69,8 @@ TEST_CASE("handles into a document stay valid when the document moves", "[docume
     assigned = std::move(moved);
     CHECK(name == "k");
     CHECK(string == "s");
-    CHECK(assigned.root().as_object()->find("k")->value.as_array()->size() == 2);
+    const auto k = required(required(assigned.root().as_object()).find("k"));
+    CHECK(required(k.value.as_array()).size() == 2);
 }
 
 TEST_CASE("the root is the value the text holds", "[documents]") {

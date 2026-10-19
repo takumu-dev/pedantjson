@@ -5,7 +5,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_tostring.hpp>
 
+#include <cstddef>
 #include <expected>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -52,6 +54,28 @@ template <> struct Catch::StringMaker<pedantjson::Pointer> {
 
 namespace support {
 
+/// The value of an optional that must hold one, failing the test if it doesn't.
+template <typename T> T required(std::optional<T> value) {
+    REQUIRE(value.has_value());
+    // REQUIRE has ended the test if the optional is empty, which clang-tidy can't see.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): see above
+    return *std::move(value);
+}
+
+/// The element of an array at an index the array must have, failing the test if it hasn't.
+inline pedantjson::Value element(const pedantjson::Array& array, std::size_t index) {
+    REQUIRE(index < array.size());
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): checked above
+    return array[index];
+}
+
+/// The member of an object at an index the object must have, failing the test if it hasn't.
+inline pedantjson::Member member(const pedantjson::Object& object, std::size_t index) {
+    REQUIRE(index < object.size());
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): checked above
+    return object[index];
+}
+
 /// Reads a text that must be JSON, failing the test if it isn't.
 inline pedantjson::Document parsed(std::string text, pedantjson::ParseOptions options = {}) {
     auto document = pedantjson::parse(std::move(text), options);
@@ -66,23 +90,21 @@ inline pedantjson::Document parsed(std::string text, pedantjson::ParseOptions op
 inline pedantjson::SyntaxError syntax_error(std::string text,
                                             pedantjson::ParseOptions options = {}) {
     auto document = pedantjson::parse(std::move(text), options);
-    REQUIRE_FALSE(document.has_value());
+    REQUIRE(!document.has_value());
     return document.error();
 }
 
 /// Reads a text that must be a number into the type `T`.
 template <typename T> std::expected<T, pedantjson::NumberError> number_as(std::string text) {
     const auto document = parsed(std::move(text));
-    const auto number = document.root().as_number();
-    REQUIRE(number.has_value());
-    return number->to<T>();
+    return required(document.root().as_number()).template to<T>();
 }
 
 /// Reads a text that must be a number into the type `T`, which must fail, failing the test if it
 /// doesn't.
 template <typename T> pedantjson::NumberErrorCode number_error(std::string text) {
     const auto number = number_as<T>(std::move(text));
-    REQUIRE_FALSE(number.has_value());
+    REQUIRE(!number.has_value());
     return number.error().code;
 }
 

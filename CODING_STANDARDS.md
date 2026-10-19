@@ -125,6 +125,9 @@ departs from them, it says so.
 - A test uses the public header only, and survives any refactoring that keeps the behaviour. Its
   name is a sentence saying what holds, such as "a default array is empty". A test case's name must
   not begin with `-`, which Catch2 would read as one of its options.
+- A test reaches into what it reads through `support::required`, `support::element` and
+  `support::member`, which end the test when an optional is empty or an index is past the end,
+  rather than dereferencing or indexing unchecked.
 - Each test file covers one part of the format or the interface, and its test cases carry that
   part's Catch2 tag, such as `[strings]`. A test of a syntax error checks its code and its offset.
 - A test's JSON text is written in C++, as a raw string where it can be. Check the bytes of any test
