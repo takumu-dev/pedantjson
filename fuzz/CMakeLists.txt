@@ -32,18 +32,8 @@ endif()
 # libFuzzer follows the paths each text takes through the library, so the library has to be built
 # with coverage instrumentation. That instrumentation needs libFuzzer's runtime in the program, so
 # the fuzzer builds a copy of the library of its own, leaving the tests and the install alone.
-get_target_property(library_dir pedantjson SOURCE_DIR)
-get_target_property(library_sources pedantjson SOURCES)
-list(TRANSFORM library_sources PREPEND "${library_dir}/")
-add_library(pedantjson_fuzzed STATIC ${library_sources})
-target_include_directories(pedantjson_fuzzed PUBLIC "${PROJECT_SOURCE_DIR}/include")
-target_compile_features(pedantjson_fuzzed PUBLIC cxx_std_23)
+pedantjson_add_library(pedantjson_fuzzed)
 target_compile_options(pedantjson_fuzzed PRIVATE -fsanitize=fuzzer-no-link)
-set_target_properties(pedantjson_fuzzed PROPERTIES
-    CXX_EXTENSIONS OFF
-    CXX_SCAN_FOR_MODULES OFF
-)
-pedantjson_target_conventions(pedantjson_fuzzed)
 
 add_executable(pedantjson_fuzzer fuzzer.cpp)
 target_link_libraries(pedantjson_fuzzer PRIVATE pedantjson_fuzzed)
