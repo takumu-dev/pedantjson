@@ -29,6 +29,7 @@ add_library(pedantjson::pedantjson ALIAS pedantjson)
 target_sources(pedantjson
     PRIVATE
         src/document.cpp
+        src/number.cpp
         src/parse.cpp
         src/storage.hpp
     PUBLIC

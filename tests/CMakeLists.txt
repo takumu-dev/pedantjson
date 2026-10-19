@@ -10,6 +10,7 @@ add_executable(pedantjson_tests
     json_test_suite_tests.cpp
     literal_tests.cpp
     nesting_tests.cpp
+    number_conversion_tests.cpp
     number_tests.cpp
     object_tests.cpp
     string_value_tests.cpp
