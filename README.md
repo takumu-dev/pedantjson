@@ -205,7 +205,7 @@ cmake --workflow --preset gcc-debug
 | `clang-debug`, `clang-release`, `clang-sanitize` | Clang with libstdc++, as for GCC |
 | `libcxx-debug`, `libcxx-release`, `libcxx-sanitize` | Clang with libc++, as for GCC |
 | `msvc-debug`, `msvc-release` | MSVC, from a developer command prompt |
-| `msvc-asan` | MSVC, debug, with AddressSanitizer |
+| `msvc-asan` | MSVC, optimised with assertions kept on, with AddressSanitizer |
 | `msvc-noexcept` | MSVC, release, the library alone, built without exceptions |
 | `apple-clang-debug`, `apple-clang-release`, `apple-clang-noexcept` | Apple Clang, as for GCC |
 | `tidy` | The library and the tests, with clang-tidy |

@@ -5,8 +5,8 @@
 set(prefix "${CMAKE_CURRENT_BINARY_DIR}/prefix")
 set(builds "${CMAKE_CURRENT_BINARY_DIR}/builds")
 
-# The flags of this build's type go too, since a preset may replace the defaults, as one that
-# builds with AddressSanitizer drops MSVC's /RTC1, which the sanitizer refuses.
+# The flags of this build's type go too, since a preset may replace the defaults, as MSVC's with
+# AddressSanitizer keeps assertions on in an optimised build.
 set(config_flags "")
 if(CMAKE_BUILD_TYPE)
     string(TOUPPER "${CMAKE_BUILD_TYPE}" config)

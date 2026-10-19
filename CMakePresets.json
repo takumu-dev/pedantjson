@@ -183,7 +183,7 @@
       "name": "libcxx-sanitize",
       "inherits": ["libcxx", "debug"],
       "displayName": "Clang with libc++, debug, AddressSanitizer and UndefinedBehaviorSanitizer",
-      "description": "The libc++ flags and the sanitizer flags together, since a preset takes each variable from one parent alone.",
+      "description": "The flags of libc++ and of both sanitizers together, since a preset takes each variable from one parent alone.",
       "cacheVariables": {
         "CMAKE_CXX_FLAGS": "-stdlib=libc++ -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer",
         "CMAKE_EXE_LINKER_FLAGS": "-stdlib=libc++ -fsanitize=address,undefined"
@@ -201,15 +201,17 @@
     },
     {
       "name": "msvc-asan",
-      "inherits": ["msvc", "debug"],
-      "displayName": "MSVC, debug, AddressSanitizer",
-      "description": "The library and the tests are instrumented, and Catch2 isn't, so the standard library's container annotations, which need every part of a program instrumented, are off. AddressSanitizer refuses the /RTC1 of the default debug flags, and ignores incremental linking.",
+      "inherits": "msvc",
+      "displayName": "MSVC, AddressSanitizer, with assertions",
+      "description": "Optimised against the release CRT, as the instrumented Catch2 is, with the assertions of a debug build kept on. MSVC's standard library won't link instrumented code beside code that isn't, and AddressSanitizer refuses the /RTC1 in vcpkg's debug builds, so Catch2 is built instrumented for release alone. AddressSanitizer ignores incremental linking.",
       "environment": {
-        "CXXFLAGS": "/fsanitize=address /D_DISABLE_VECTOR_ANNOTATION /D_DISABLE_STRING_ANNOTATION"
+        "CXXFLAGS": "/fsanitize=address"
       },
       "cacheVariables": {
-        "CMAKE_CXX_FLAGS_DEBUG": "/Ob0 /Od",
-        "CMAKE_EXE_LINKER_FLAGS_DEBUG": "/debug /INCREMENTAL:NO"
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "/O2 /Ob1",
+        "CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO": "/debug /INCREMENTAL:NO",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-asan"
       }
     },
     {

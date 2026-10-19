@@ -164,13 +164,18 @@ jobs:
           - name: MSVC 14.44, release
             runner: windows-2025
             msvc: "14.44"
+            triplet: x64-windows-static-md
             presets: msvc-release
           # The newest toolset on the Visual Studio 2026 image.
-          - name: MSVC latest, debug, ASan
+          # MSVC's AddressSanitizer needs Catch2 instrumented, which vcpkg builds for release alone,
+          # so this job builds optimised against the release CRT, with assertions kept on.
+          - name: MSVC latest, ASan, with assertions
             runner: windows-2025-vs2026
+            triplet: x64-windows-asan
             presets: msvc-asan
           - name: MSVC latest, release, with and without exceptions
             runner: windows-2025-vs2026
+            triplet: x64-windows-static-md
             presets: msvc-release msvc-noexcept
     defaults:
       run:
@@ -210,13 +215,14 @@ jobs:
           & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
           New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
 
+      # The triplet chooses how the ports are built, and the job's toolset builds them.
       - name: Restore the vcpkg binary cache
         id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
-          key: vcpkg-msvc-${{ steps.msvc.outputs.toolset }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'triplets/**') }}
-          restore-keys: vcpkg-msvc-${{ steps.msvc.outputs.toolset }}-
+          key: vcpkg-${{ matrix.triplet }}-${{ steps.msvc.outputs.toolset }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'triplets/**') }}
+          restore-keys: vcpkg-${{ matrix.triplet }}-${{ steps.msvc.outputs.toolset }}-
 
       - name: Configure, build and test
         env:
