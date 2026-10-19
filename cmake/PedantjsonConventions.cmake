@@ -13,6 +13,7 @@ function(pedantjson_target_warnings target)
         target_compile_options(${target} PRIVATE
             /W4
             /permissive-
+            /Zc:preprocessor # the standard preprocessor, which reads a raw string in a macro argument
             /w14242 # conversion from one integer type to a smaller one
             /w14254 # a larger bit field assigned to a smaller one
             /w14263 # a member function hides a virtual one
