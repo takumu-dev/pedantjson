@@ -144,8 +144,10 @@ departs from them, it says so.
 ## Versions, commits and branches
 
 - Versions follow [semantic versioning](https://semver.org). Before 1.0, a minor release may break
-  the interface. The version lives in `project(pedantjson VERSION x.y.z)`, and in the vcpkg port's
-  manifest, which vcpkg needs and a test keeps in step with it.
+  the interface. The version lives in `project(pedantjson VERSION x.y.z)`, and `RELEASING.md` says
+  how a release raises it. The vcpkg port's manifest names the release the port downloads, so the
+  port follows the version only once that release is tagged, and a test keeps it at most one
+  release behind.
 - A change that a project using pedantjson would notice adds a line to the `Unreleased` section of
   `CHANGELOG.md`, in the branch that makes it, under the heading Keep a Changelog gives its kind:
   `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed` or `Security`. A release dates that section

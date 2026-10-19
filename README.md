@@ -173,6 +173,11 @@ The install also has a pkg-config file, `pedantjson.pc`, for Meson, Makefiles an
 c++ -std=c++23 app.cpp $(pkg-config --cflags --libs pedantjson)
 ```
 
+Through [vcpkg](https://vcpkg.io), with `ports/pedantjson/` as an overlay port until pedantjson is
+in vcpkg's registry. The port downloads the release it names and installs it as a package, which
+`find_package` finds as above. Take it from the `develop` branch: the port can name a release only
+once the release is tagged, so a release's own copy names the release before it.
+
 As a subproject, through a git submodule or `FetchContent`:
 
 ```cmake
@@ -235,11 +240,13 @@ cmake --build --preset clang-sanitize --target fuzz
 own, as `CODING_STANDARDS.md` describes.
 
 - `CODING_STANDARDS.md` says how the code is written, tested and committed.
-- `CHANGELOG.md` lists the changes in each release, and those not yet released.
+- `CHANGELOG.md` lists the changes in each release, and those not yet released, and
+  `RELEASING.md` says how a release is made.
 - `tests/consumers/` builds a small program against the installed package, through pkg-config, and
   as a subproject.
-- `ports/pedantjson/` is a vcpkg port that builds the source tree it sits in, through which CI
-  builds the same program with vcpkg.
+- `ports/pedantjson/` is the vcpkg port, which downloads and builds the release it names. CI
+  builds the same program through it, and through its portfile run on the checkout by
+  `ci/checkout-port/`, so that each change is built with vcpkg before it is released.
 - `.github/workflows/ci.yml` builds and tests every pull request with each compiler above, at its
   oldest version and its newest release, and fuzzes the parser for a minute.
 
