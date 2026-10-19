@@ -17,8 +17,9 @@ do that.
 
 pedantjson is at an early stage, and has no release yet. Today it reads the grammar of
 [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) strictly, rejecting every text the RFC forbids
-and deciding each case the RFC leaves open, as [Strictness](#strictness) describes. Still to come
-are numbers read into the type a caller asks for, lines and columns, and JSON pointers.
+and deciding each case the RFC leaves open, as [Strictness](#strictness) describes, and it reads
+a number into the type a caller asks for, catching a value beyond that type's range. Still to come
+are lines and columns, and JSON pointers.
 
 ## Example
 
@@ -63,7 +64,10 @@ Everything is in namespace `pedantjson`, in the one header `<pedantjson/pedantjs
 - An `Array` is a range of values, and an `Object` a range of members, each a `Key` and a `Value`,
   in the order of the text. `Object::find(name)` answers the first member of a name, and a caller
   that must treat duplicates walks the members.
-- A `Number` keeps its text, exactly as written.
+- A `Number` keeps its text, exactly as written. `to<T>()` reads it into any standard integer
+  type, `float` or `double`, and returns a `std::expected<T, NumberError>`. `is_integer()` says
+  whether its value is an integer.
+- A `NumberError` has a `code`, `out_of_range` or `not_an_integer`, and a `message()`.
 - A `SyntaxError` has a `code`, the `offset` where the text stops being JSON, and a `message()`.
 
 ## Strictness
@@ -86,6 +90,13 @@ as follows:
   limit isn't for its sake but for a program that walks the document by recursion.
 - A number of any size or precision is read, and keeps its text, so a value too large for a type
   is caught when it is read into that type rather than when the text is read.
+- A number whose value is an integer is an integer, however it is written: `1.0`, `1e2` and
+  `150e-1` read into an `int` as 1, 100 and 15, exactly, at any size the type holds. A number whose
+  value has a fraction, such as `1.5` or `1e-1`, is `not_an_integer` for an integer type, and an
+  integer the type can't hold is `out_of_range`. Negative zero reads as zero.
+- A floating-point type reads the value nearest the number. A number that rounds beyond the type's
+  largest finite value is `out_of_range`, and so is one that isn't zero but rounds to zero, rather
+  than becoming an infinity or a zero the text never wrote. Negative zero keeps its sign.
 - An object keeps every member, duplicate names included, and leaves it to the caller whether a
   duplicate is an error.
 

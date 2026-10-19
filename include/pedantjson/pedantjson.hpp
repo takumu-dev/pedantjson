@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -29,6 +30,10 @@ namespace detail {
 
 /// A document's text and its nodes, shared by every handle into the document.
 struct Storage;
+
+/// Whether `T` is one of `Types`.
+template <typename T, typename... Types>
+concept OneOf = (std::same_as<T, Types> || ...);
 
 /// Walks the elements of an array or the members of an object, in the order of the text.
 ///
@@ -115,6 +120,33 @@ enum class Kind : std::uint8_t {
     object,  ///< An object, such as `{"x": 1}`.
 };
 
+/// A type that `Number::to` reads a number into: a standard integer type, signed or unsigned, from
+/// `signed char` to `unsigned long long`, or `float` or `double`.
+///
+/// `bool` and the character types aren't numbers. `long double` is left out because libc++ has no
+/// `std::from_chars` for it.
+template <typename T>
+concept NumberType =
+    detail::OneOf<T, signed char, short, int, long, long long, unsigned char, unsigned short,
+                  unsigned int, unsigned long, unsigned long long, float, double>;
+
+/// Why a number can't be read into the type asked for.
+enum class NumberErrorCode : std::uint8_t {
+    out_of_range,   ///< The number is beyond what the type can hold.
+    not_an_integer, ///< The number's value has a fraction, and the type holds integers only.
+};
+
+/// Why a number can't be read into the type asked for.
+struct NumberError {
+    /// Why it can't.
+    NumberErrorCode code;
+
+    /// Why it can't, in words, such as `number out of range`.
+    ///
+    /// \return A fixed message for the code, in lower case with no full stop.
+    [[nodiscard]] std::string_view message() const noexcept;
+};
+
 /// A number, as the text writes it.
 class Number {
   public:
@@ -122,6 +154,27 @@ class Number {
     ///
     /// \return A view into the document's text, valid as long as the document is.
     [[nodiscard]] std::string_view text() const noexcept { return text_; }
+
+    /// Whether the number's value is an integer, however it is written: `1.0`, `1e2` and `150e-1`
+    /// are integers, while `1.5` and `1e-1` aren't. The answer doesn't depend on any type's range.
+    ///
+    /// \return Whether it is.
+    [[nodiscard]] bool is_integer() const noexcept;
+
+    /// The number read into the type `T`.
+    ///
+    /// An integer type reads the number exactly, if its value is an integer, however it is
+    /// written: `1.5e2` reads as 150. A number whose value has a fraction is `not_an_integer`,
+    /// however large it is, and an integer beyond the type's range is `out_of_range`. Zero reads as
+    /// zero, negative zero included.
+    ///
+    /// A floating-point type reads the value it holds nearest the number, as `std::from_chars`
+    /// rounds it. A number that rounds beyond the type's largest finite value, or one that isn't
+    /// zero but rounds to zero, is `out_of_range`. Negative zero keeps its sign.
+    ///
+    /// \tparam T The type to read it into.
+    /// \return The number, or why `T` can't hold it.
+    template <NumberType T> [[nodiscard]] std::expected<T, NumberError> to() const noexcept;
 
   private:
     friend class Value;
@@ -134,6 +187,26 @@ class Number {
     /// The number as the text writes it.
     std::string_view text_;
 };
+
+// The library holds the code that reads each type, compiled once. Declaring it here tells a
+// caller's compiler that the definition is elsewhere on purpose, which Clang's
+// -Wundefined-func-template would otherwise warn of.
+extern template std::expected<signed char, NumberError> Number::to<signed char>() const noexcept;
+extern template std::expected<short, NumberError> Number::to<short>() const noexcept;
+extern template std::expected<int, NumberError> Number::to<int>() const noexcept;
+extern template std::expected<long, NumberError> Number::to<long>() const noexcept;
+extern template std::expected<long long, NumberError> Number::to<long long>() const noexcept;
+extern template std::expected<unsigned char, NumberError>
+Number::to<unsigned char>() const noexcept;
+extern template std::expected<unsigned short, NumberError>
+Number::to<unsigned short>() const noexcept;
+extern template std::expected<unsigned int, NumberError> Number::to<unsigned int>() const noexcept;
+extern template std::expected<unsigned long, NumberError>
+Number::to<unsigned long>() const noexcept;
+extern template std::expected<unsigned long long, NumberError>
+Number::to<unsigned long long>() const noexcept;
+extern template std::expected<float, NumberError> Number::to<float>() const noexcept;
+extern template std::expected<double, NumberError> Number::to<double>() const noexcept;
 
 /// A handle to one value of a document.
 ///
