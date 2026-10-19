@@ -11,17 +11,10 @@
 
 using pedantjson::Position;
 using pedantjson::SyntaxErrorCode;
+using support::byte_order_mark;
 using support::element;
 using support::parsed;
 using support::required;
-
-namespace {
-
-/// The byte-order mark, U+FEFF, in UTF-8.
-// NOLINTNEXTLINE(modernize-use-string-view): the tests build texts around it with operator+
-std::string byte_order_mark() { return "\xef\xbb\xbf"; }
-
-} // namespace
 
 TEST_CASE("a position is a line and a column, each counting from 1", "[positions]") {
     const auto document = parsed(R"({

@@ -10,17 +10,10 @@
 
 using pedantjson::Kind;
 using pedantjson::SyntaxErrorCode;
+using support::byte_order_mark;
 using support::parsed;
 using support::required;
 using support::syntax_error;
-
-namespace {
-
-/// The byte-order mark, U+FEFF, in UTF-8.
-// NOLINTNEXTLINE(modernize-use-string-view): the tests build texts around it with operator+
-std::string byte_order_mark() { return "\xef\xbb\xbf"; }
-
-} // namespace
 
 TEST_CASE("a byte-order mark at the start of the text is ignored", "[encoding]") {
     const auto document = parsed(byte_order_mark() + R"( {"a": 1})");

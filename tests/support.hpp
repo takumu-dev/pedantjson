@@ -54,11 +54,14 @@ template <> struct Catch::StringMaker<pedantjson::Pointer> {
 
 namespace support {
 
+/// The byte-order mark, U+FEFF, in UTF-8.
+// NOLINTNEXTLINE(modernize-use-string-view): tests build texts around it with operator+
+inline std::string byte_order_mark() { return "\xef\xbb\xbf"; }
+
 /// The value of an optional that must hold one, failing the test if it doesn't.
 template <typename T> T required(std::optional<T> value) {
     REQUIRE(value.has_value());
-    // REQUIRE has ended the test if the optional is empty, which clang-tidy can't see.
-    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): see above
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): REQUIRE has ended the test if it's empty
     return *std::move(value);
 }
 
