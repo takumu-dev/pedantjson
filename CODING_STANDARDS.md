@@ -140,7 +140,8 @@ departs from them, it says so.
 ## Versions, commits and branches
 
 - Versions follow [semantic versioning](https://semver.org). Before 1.0, a minor release may break
-  the interface. The version lives only in `project(pedantjson VERSION x.y.z)`.
+  the interface. The version lives in `project(pedantjson VERSION x.y.z)`, and in the vcpkg port's
+  manifest, which vcpkg needs and a test keeps in step with it.
 - Commit subjects follow Conventional Commits, `type(scope)!: description`, with the type one of
   `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style` or `test`.
   The scope and the `!` of a breaking change are optional. A message describes the change and why.
