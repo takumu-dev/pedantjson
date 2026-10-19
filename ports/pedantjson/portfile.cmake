@@ -1,8 +1,12 @@
-# Builds pedantjson from the source tree this port sits in, so that CI builds each change through
-# vcpkg as a project using the port would. vcpkg's binary caching knows the port's files but not
-# the source tree, so a build through this port runs with caching off.
-cmake_path(GET CURRENT_PORT_DIR PARENT_PATH ports_dir)
-cmake_path(GET ports_dir PARENT_PATH SOURCE_PATH)
+vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
+
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
+    REPO takumu-dev/pedantjson
+    REF "${VERSION}"
+    SHA512 1aa74e7d5f1c8d909ede684ef135de13b65cd3db7d88a91e7da8ee3de3c8fd56fc197b36b7be7e5cb047bfcd8db59b4c6dfb1ac6c39fbcfa41e6db2c5ac1bb8d
+    HEAD_REF develop
+)
 
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"

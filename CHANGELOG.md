@@ -7,6 +7,12 @@ the form of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions f
 
 ## [Unreleased]
 
+### Changed
+
+- The vcpkg port in `ports/pedantjson/` downloads and builds the release it names, rather than the
+  source tree it sits in, so that a project can take it as an overlay port until pedantjson is in
+  vcpkg's registry.
+
 ## [0.1.0] - 2026-10-19
 
 ### Added
