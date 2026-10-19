@@ -15,7 +15,8 @@ It is meant for formats written by hand, whose readers have to point at each mis
 parser that quietly keeps the last of two duplicate keys, or forgets where a value came from, can't
 do that.
 
-pedantjson is at an early stage, and has no release yet. It reads the grammar of
+pedantjson is at an early stage: until 1.0.0, a minor release may break the interface, and
+`CHANGELOG.md` lists what each release changes. It reads the grammar of
 [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) strictly, rejecting every text the RFC forbids
 and deciding each case the RFC leaves open, as [Strictness](#strictness) describes. It reads a
 number into the type a caller asks for, catching a value beyond that type's range, and it builds
@@ -234,6 +235,7 @@ cmake --build --preset clang-sanitize --target fuzz
 own, as `CODING_STANDARDS.md` describes.
 
 - `CODING_STANDARDS.md` says how the code is written, tested and committed.
+- `CHANGELOG.md` lists the changes in each release, and those not yet released.
 - `tests/consumers/` builds a small program against the installed package, through pkg-config, and
   as a subproject.
 - `ports/pedantjson/` is a vcpkg port that builds the source tree it sits in, through which CI
