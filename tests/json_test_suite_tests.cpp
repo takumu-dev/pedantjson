@@ -10,13 +10,14 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
 #include <optional>
 #include <ranges>
 #include <set>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 using pedantjson::SyntaxError;
@@ -151,7 +152,9 @@ std::string read(const std::string& name) {
     std::ifstream file{suite / name, std::ios::binary};
     INFO("reading " << name);
     REQUIRE(file.is_open());
-    return {std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    std::ostringstream bytes;
+    bytes << file.rdbuf();
+    return std::move(bytes).str();
 }
 
 /// The row of the table for a file, if it has one.
