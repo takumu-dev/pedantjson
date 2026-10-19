@@ -419,7 +419,9 @@ jobs:
           cmake --build build/pkg-config
           build/pkg-config/consumer
 
-  # The same project, given pedantjson by vcpkg through the overlay port in ports/.
+  # The same project, given pedantjson by vcpkg through the port in ports/: once as the port stands,
+  # downloading the release it names as it will from vcpkg's registry, and once with its portfile
+  # run on this checkout, so that each change is built through the port before it is released.
   consumer-vcpkg:
     name: A project using pedantjson through vcpkg
     runs-on: ubuntu-24.04
@@ -431,9 +433,6 @@ jobs:
     env:
       VCPKG_ROOT: /opt/vcpkg
       VCPKG_FORCE_SYSTEM_BINARIES: 1
-      # The port builds this checkout, which vcpkg's binary caching doesn't see, so nothing is
-      # cached or restored.
-      VCPKG_BINARY_SOURCES: clear
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -443,13 +442,26 @@ jobs:
       - name: Set up vcpkg at the manifest's baseline
         run: ci/setup-vcpkg.sh
 
-      - name: Build and run a project that gets pedantjson from vcpkg
+      - name: Build and run a project that gets the port's release from vcpkg
         run: |
           cmake -S tests/consumers/installed -B build/vcpkg -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_OVERLAY_PORTS="$PWD/ports"
           cmake --build build/vcpkg
           build/vcpkg/consumer
+
+      - name: Build and run a project that gets this checkout from vcpkg, through the port's portfile
+        env:
+          # A build of the checkout looks the same to vcpkg's binary caching as a build of any
+          # other, so nothing is cached or restored.
+          VCPKG_BINARY_SOURCES: clear
+        run: |
+          cmake -S tests/consumers/installed -B build/vcpkg-checkout -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_OVERLAY_PORTS="$PWD/ci/checkout-port"
+          cmake --build build/vcpkg-checkout
+          build/vcpkg-checkout/consumer
 
       - name: Keep the logs of a failed job
         if: failure()
@@ -458,6 +470,7 @@ jobs:
           name: logs-consumer-vcpkg
           path: |
             build/vcpkg/vcpkg-manifest-install.log
+            build/vcpkg-checkout/vcpkg-manifest-install.log
             ${{ env.VCPKG_ROOT }}/buildtrees/*/*.log
           if-no-files-found: ignore
           retention-days: 14

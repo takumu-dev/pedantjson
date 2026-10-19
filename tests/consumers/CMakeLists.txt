@@ -1,6 +1,6 @@
-# The ways in for a project: the installed package, through CMake or pkg-config, the subproject,
-# and the vcpkg port. Each consumer is a project of its own, which CTest configures, builds and
-# runs with this build's compiler and flags.
+# The ways in for a project: the installed package, through CMake or pkg-config, and the subproject.
+# Each consumer is a project of its own, which CTest configures, builds and runs with this build's
+# compiler and flags.
 
 set(prefix "${CMAKE_CURRENT_BINARY_DIR}/prefix")
 set(builds "${CMAKE_CURRENT_BINARY_DIR}/builds")
@@ -83,11 +83,4 @@ endif()
 
 pedantjson_add_consumer_test("a project builds pedantjson as a subproject" subproject
     OPTIONS "-DPEDANTJSON_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
-)
-
-add_test(NAME "consumers: the vcpkg port has the project's version"
-    COMMAND "${CMAKE_COMMAND}"
-        "-DMANIFEST=${PROJECT_SOURCE_DIR}/ports/pedantjson/vcpkg.json"
-        "-DVERSION=${PROJECT_VERSION}"
-        -P "${CMAKE_CURRENT_SOURCE_DIR}/port_version.cmake"
 )
