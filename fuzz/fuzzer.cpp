@@ -68,7 +68,7 @@ std::string quoted(std::string_view string) {
     return text + '"';
 }
 
-/// Checks that a string's decoded text reads back as itself, written as a JSON string.
+/// Checks that a decoded string reads back as itself, written as a JSON string.
 void check_string(std::string_view string) {
     const auto reread = pedantjson::parse(quoted(string));
     if (!reread) {
@@ -99,6 +99,14 @@ template <typename T> void check_integer(const Number& number) {
     }
 }
 
+/// Checks that a floating-point type reads a number as a finite value, or finds it out of range.
+template <typename T> void check_floating_point(const Number& number) {
+    const auto read = number.to<T>();
+    check(read || read.error().code == NumberErrorCode::out_of_range,
+          "a floating-point type reads a number or finds it out_of_range");
+    check(!read || std::isfinite(*read), "a floating-point type reads a finite value");
+}
+
 /// Checks a number against its text, and its readings into each type against one another.
 void check_number(const Number& number, std::string_view text, std::size_t offset) {
     check(has_at(text, offset, number.text()), "a number keeps its text as the text writes it");
@@ -113,6 +121,8 @@ void check_number(const Number& number, std::string_view text, std::size_t offse
     check_integer<unsigned int>(number);
     check_integer<unsigned long>(number);
     check_integer<unsigned long long>(number);
+    check_floating_point<float>(number);
+    check_floating_point<double>(number);
 
     const auto signed_value = number.to<long long>();
     const auto unsigned_value = number.to<unsigned long long>();
@@ -126,17 +136,12 @@ void check_number(const Number& number, std::string_view text, std::size_t offse
     }
 
     const auto as_double = number.to<double>();
-    const auto as_float = number.to<float>();
-    check(as_double || as_double.error().code == NumberErrorCode::out_of_range,
-          "a floating-point type reads a number or finds it out_of_range");
-    check(as_float || as_float.error().code == NumberErrorCode::out_of_range,
-          "a floating-point type reads a number or finds it out_of_range");
-    check(!as_double || std::isfinite(*as_double), "a double read is finite");
-    check(!as_float || std::isfinite(*as_float), "a float read is finite");
-    check(as_double || !as_float, "a number out of a double's range is out of a float's too");
-    // A double holds every integer of up to 53 bits exactly.
-    constexpr long long exact_doubles = 9'007'199'254'740'992; // 2^53
-    if (signed_value && *signed_value >= -exact_doubles && *signed_value <= exact_doubles) {
+    check(as_double || !number.to<float>().has_value(),
+          "a number out of a double's range is out of a float's too");
+    // A double holds every integer up to 2^53 exactly.
+    constexpr long long largest_exact_integer = 9'007'199'254'740'992;
+    if (signed_value && *signed_value >= -largest_exact_integer &&
+        *signed_value <= largest_exact_integer) {
         check(as_double && *as_double == static_cast<double>(*signed_value),
               "an integer that a double holds exactly reads as exactly that double");
     }
@@ -158,7 +163,7 @@ class Walk {
     // NOLINTNEXTLINE(misc-no-recursion): max_depth bounds the depth, which is what it is for
     void visit(const Value& value, const Pointer& pointer, bool first) {
         check(value.offset() < text_.size(), "a value begins within the text");
-        next(value.offset());
+        check_order(value.offset());
         check_lookups(value, pointer, first);
         check_kind(value);
 
@@ -173,15 +178,16 @@ class Walk {
                   "an array has no element at its size");
         } else if (const auto object = value.as_object()) {
             std::size_t count = 0;
-            for (const auto [key, member] : *object) {
-                next(key.offset());
+            for (const pedantjson::Member member : *object) {
+                const pedantjson::Key key = member.key;
+                check_order(key.offset());
                 check(has_at(text_, key.offset(), "\""), "a key begins at its quotation mark");
                 check_string(key.name());
                 const auto namesake = object->find(key.name());
                 if (!namesake) {
                     broken("an object finds the name of each of its members");
                 }
-                visit(member, pointer / key.name(),
+                visit(member.value, pointer / key.name(),
                       first && namesake->key.offset() == key.offset());
                 ++count;
             }
@@ -192,7 +198,7 @@ class Walk {
   private:
     /// Checks that values and keys come in the order of the text, each at a later offset and
     /// position than the one before.
-    void next(std::size_t offset) {
+    void check_order(std::size_t offset) {
         const Position position = document_->position(offset);
         check(position.line >= 1 && position.column >= 1, "a position counts from 1:1");
         if (seen_any_) {
@@ -308,7 +314,7 @@ void check_text(const std::string& text) {
     // Handles stay valid through a move of their document.
     const Value root = document->root();
     const Document moved = std::move(*document);
-    Walk{moved, text}.visit(root, Pointer{}, true);
+    Walk{moved, text}.visit(root, Pointer{}, /*first=*/true);
 }
 
 /// Checks what `Pointer::parse` makes of a text.
