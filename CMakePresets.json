@@ -259,7 +259,7 @@
       "name": "tidy",
       "inherits": ["clang", "debug"],
       "displayName": "clang-tidy",
-      "description": "Builds the library and the tests with clang-tidy run on every source.",
+      "description": "Builds the library, the tests and, where libFuzzer links, the fuzzer, with clang-tidy run on every source.",
       "cacheVariables": {
         "CMAKE_CXX_CLANG_TIDY": "clang-tidy"
       }
