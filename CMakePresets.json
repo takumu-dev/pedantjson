@@ -1,0 +1,496 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "description": "Every preset that builds the library builds with Ninja and takes the tests' dependencies from vcpkg, found through VCPKG_ROOT.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "CMAKE_COMPILE_WARNING_AS_ERROR": true,
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "VCPKG_MANIFEST_FEATURES": "tests"
+      }
+    },
+    {
+      "name": "linux",
+      "hidden": true,
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "gcc",
+      "hidden": true,
+      "inherits": "linux",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "clang",
+      "hidden": true,
+      "inherits": "linux",
+      "description": "Clang with libstdc++.",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "libcxx",
+      "hidden": true,
+      "inherits": "clang",
+      "description": "Clang with libc++. libc++ and libstdc++ can't be mixed in one program, so the tests' dependencies are built with libc++ too.",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-stdlib=libc++",
+        "CMAKE_EXE_LINKER_FLAGS": "-stdlib=libc++",
+        "VCPKG_TARGET_TRIPLET": "x64-linux-libcxx"
+      }
+    },
+    {
+      "name": "msvc",
+      "hidden": true,
+      "inherits": "base",
+      "description": "Run from a developer command prompt for MSVC, which puts cl on the PATH.",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
+      }
+    },
+    {
+      "name": "apple-clang",
+      "hidden": true,
+      "inherits": "base",
+      "description": "The Apple Clang of the Xcode that xcode-select or DEVELOPER_DIR chooses.",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "/usr/bin/clang++"
+      }
+    },
+    {
+      "name": "debug",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "sanitize",
+      "hidden": true,
+      "description": "The library and the tests are instrumented. Catch2 isn't, which AddressSanitizer on Linux doesn't need.",
+      "inherits": "debug",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+      }
+    },
+    {
+      "name": "noexcept",
+      "hidden": true,
+      "description": "The library builds with exceptions disabled, as a project might build it. The tests keep exceptions for Catch2.",
+      "inherits": "release",
+      "cacheVariables": {
+        "PEDANTJSON_EXCEPTIONS": false
+      }
+    },
+    {
+      "name": "lint",
+      "hidden": true,
+      "description": "Checks that build nothing, so they need neither vcpkg, the tests nor the fuzzer.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "PEDANTJSON_BUILD_FUZZER": false,
+        "PEDANTJSON_BUILD_TESTS": false,
+        "PEDANTJSON_INSTALL": false
+      }
+    },
+    {
+      "name": "library",
+      "displayName": "The library alone, release, installed without vcpkg",
+      "description": "Builds the library as a project that installs it from its source would, with no vcpkg, tests or fuzzer, and installs it into build/library/prefix.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "installDir": "${sourceDir}/build/${presetName}/prefix",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_COMPILE_WARNING_AS_ERROR": true,
+        "PEDANTJSON_BUILD_FUZZER": false,
+        "PEDANTJSON_BUILD_TESTS": false
+      }
+    },
+    {
+      "name": "gcc-debug",
+      "inherits": ["gcc", "debug"],
+      "displayName": "GCC, debug"
+    },
+    {
+      "name": "gcc-release",
+      "inherits": ["gcc", "release"],
+      "displayName": "GCC, release"
+    },
+    {
+      "name": "gcc-sanitize",
+      "inherits": ["gcc", "sanitize"],
+      "displayName": "GCC, debug, AddressSanitizer and UndefinedBehaviorSanitizer"
+    },
+    {
+      "name": "gcc-noexcept",
+      "inherits": ["gcc", "noexcept"],
+      "displayName": "GCC, release, library without exceptions"
+    },
+    {
+      "name": "clang-debug",
+      "inherits": ["clang", "debug"],
+      "displayName": "Clang with libstdc++, debug"
+    },
+    {
+      "name": "clang-release",
+      "inherits": ["clang", "release"],
+      "displayName": "Clang with libstdc++, release"
+    },
+    {
+      "name": "clang-sanitize",
+      "inherits": ["clang", "sanitize"],
+      "displayName": "Clang with libstdc++, debug, AddressSanitizer and UndefinedBehaviorSanitizer"
+    },
+    {
+      "name": "libcxx-debug",
+      "inherits": ["libcxx", "debug"],
+      "displayName": "Clang with libc++, debug"
+    },
+    {
+      "name": "libcxx-release",
+      "inherits": ["libcxx", "release"],
+      "displayName": "Clang with libc++, release"
+    },
+    {
+      "name": "libcxx-sanitize",
+      "inherits": ["libcxx", "debug"],
+      "displayName": "Clang with libc++, debug, AddressSanitizer and UndefinedBehaviorSanitizer",
+      "description": "The flags of libc++ and of both sanitizers together, since a preset takes each variable from one parent alone.",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-stdlib=libc++ -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-stdlib=libc++ -fsanitize=address,undefined"
+      }
+    },
+    {
+      "name": "msvc-debug",
+      "inherits": ["msvc", "debug"],
+      "displayName": "MSVC, debug"
+    },
+    {
+      "name": "msvc-release",
+      "inherits": ["msvc", "release"],
+      "displayName": "MSVC, release"
+    },
+    {
+      "name": "msvc-asan",
+      "inherits": "msvc",
+      "displayName": "MSVC, AddressSanitizer, with assertions",
+      "description": "Optimised against the release CRT, as the instrumented Catch2 is, with the assertions of a debug build kept on. MSVC's standard library won't link instrumented code beside code that isn't, and AddressSanitizer refuses the /RTC1 in vcpkg's debug builds, so Catch2 is built instrumented for release alone. AddressSanitizer ignores incremental linking.",
+      "environment": {
+        "CXXFLAGS": "/fsanitize=address"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "/O2 /Ob1",
+        "CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO": "/debug /INCREMENTAL:NO",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-asan"
+      }
+    },
+    {
+      "name": "msvc-noexcept",
+      "inherits": ["msvc", "release"],
+      "displayName": "MSVC, release, library without exceptions",
+      "description": "Builds the library alone with exceptions disabled. Nothing built so is mixed with Catch2, since _HAS_EXCEPTIONS=0 may change the standard library's layout.",
+      "cacheVariables": {
+        "PEDANTJSON_BUILD_TESTS": false,
+        "PEDANTJSON_EXCEPTIONS": false,
+        "VCPKG_MANIFEST_FEATURES": ""
+      }
+    },
+    {
+      "name": "apple-clang-debug",
+      "inherits": ["apple-clang", "debug"],
+      "displayName": "Apple Clang, debug"
+    },
+    {
+      "name": "apple-clang-release",
+      "inherits": ["apple-clang", "release"],
+      "displayName": "Apple Clang, release"
+    },
+    {
+      "name": "apple-clang-noexcept",
+      "inherits": ["apple-clang", "noexcept"],
+      "displayName": "Apple Clang, release, library without exceptions"
+    },
+    {
+      "name": "tidy",
+      "inherits": ["clang", "debug"],
+      "displayName": "clang-tidy",
+      "description": "Builds the library, the tests and, where libFuzzer links, the fuzzer, with clang-tidy run on every source.",
+      "cacheVariables": {
+        "CMAKE_CXX_CLANG_TIDY": "clang-tidy"
+      }
+    },
+    {
+      "name": "format",
+      "inherits": "lint",
+      "displayName": "Formatting",
+      "description": "Checks that every source is formatted as clang-format would format it."
+    },
+    {
+      "name": "docs",
+      "inherits": "lint",
+      "displayName": "Documentation",
+      "description": "Runs Doxygen over the public header, failing on any warning."
+    }
+  ],
+  "buildPresets": [
+    { "name": "library", "configurePreset": "library", "targets": ["install"] },
+    { "name": "gcc-debug", "configurePreset": "gcc-debug" },
+    { "name": "gcc-release", "configurePreset": "gcc-release" },
+    { "name": "gcc-sanitize", "configurePreset": "gcc-sanitize" },
+    { "name": "gcc-noexcept", "configurePreset": "gcc-noexcept" },
+    { "name": "clang-debug", "configurePreset": "clang-debug" },
+    { "name": "clang-release", "configurePreset": "clang-release" },
+    { "name": "clang-sanitize", "configurePreset": "clang-sanitize" },
+    { "name": "libcxx-debug", "configurePreset": "libcxx-debug" },
+    { "name": "libcxx-release", "configurePreset": "libcxx-release" },
+    { "name": "libcxx-sanitize", "configurePreset": "libcxx-sanitize" },
+    { "name": "msvc-debug", "configurePreset": "msvc-debug" },
+    { "name": "msvc-release", "configurePreset": "msvc-release" },
+    { "name": "msvc-asan", "configurePreset": "msvc-asan" },
+    { "name": "msvc-noexcept", "configurePreset": "msvc-noexcept" },
+    { "name": "apple-clang-debug", "configurePreset": "apple-clang-debug" },
+    { "name": "apple-clang-release", "configurePreset": "apple-clang-release" },
+    { "name": "apple-clang-noexcept", "configurePreset": "apple-clang-noexcept" },
+    { "name": "tidy", "configurePreset": "tidy" },
+    { "name": "format", "configurePreset": "format", "targets": ["check-format"] },
+    { "name": "docs", "configurePreset": "docs", "targets": ["docs"] }
+  ],
+  "testPresets": [
+    {
+      "name": "test",
+      "hidden": true,
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    { "name": "gcc-debug", "inherits": "test", "configurePreset": "gcc-debug" },
+    { "name": "gcc-release", "inherits": "test", "configurePreset": "gcc-release" },
+    { "name": "gcc-sanitize", "inherits": "test", "configurePreset": "gcc-sanitize" },
+    { "name": "gcc-noexcept", "inherits": "test", "configurePreset": "gcc-noexcept" },
+    { "name": "clang-debug", "inherits": "test", "configurePreset": "clang-debug" },
+    { "name": "clang-release", "inherits": "test", "configurePreset": "clang-release" },
+    { "name": "clang-sanitize", "inherits": "test", "configurePreset": "clang-sanitize" },
+    { "name": "libcxx-debug", "inherits": "test", "configurePreset": "libcxx-debug" },
+    { "name": "libcxx-release", "inherits": "test", "configurePreset": "libcxx-release" },
+    { "name": "libcxx-sanitize", "inherits": "test", "configurePreset": "libcxx-sanitize" },
+    { "name": "msvc-debug", "inherits": "test", "configurePreset": "msvc-debug" },
+    { "name": "msvc-release", "inherits": "test", "configurePreset": "msvc-release" },
+    { "name": "msvc-asan", "inherits": "test", "configurePreset": "msvc-asan" },
+    { "name": "apple-clang-debug", "inherits": "test", "configurePreset": "apple-clang-debug" },
+    { "name": "apple-clang-release", "inherits": "test", "configurePreset": "apple-clang-release" },
+    { "name": "apple-clang-noexcept", "inherits": "test", "configurePreset": "apple-clang-noexcept" }
+  ],
+  "workflowPresets": [
+    {
+      "name": "library",
+      "steps": [
+        { "type": "configure", "name": "library" },
+        { "type": "build", "name": "library" }
+      ]
+    },
+    {
+      "name": "gcc-debug",
+      "steps": [
+        { "type": "configure", "name": "gcc-debug" },
+        { "type": "build", "name": "gcc-debug" },
+        { "type": "test", "name": "gcc-debug" }
+      ]
+    },
+    {
+      "name": "gcc-release",
+      "steps": [
+        { "type": "configure", "name": "gcc-release" },
+        { "type": "build", "name": "gcc-release" },
+        { "type": "test", "name": "gcc-release" }
+      ]
+    },
+    {
+      "name": "gcc-sanitize",
+      "steps": [
+        { "type": "configure", "name": "gcc-sanitize" },
+        { "type": "build", "name": "gcc-sanitize" },
+        { "type": "test", "name": "gcc-sanitize" }
+      ]
+    },
+    {
+      "name": "gcc-noexcept",
+      "steps": [
+        { "type": "configure", "name": "gcc-noexcept" },
+        { "type": "build", "name": "gcc-noexcept" },
+        { "type": "test", "name": "gcc-noexcept" }
+      ]
+    },
+    {
+      "name": "clang-debug",
+      "steps": [
+        { "type": "configure", "name": "clang-debug" },
+        { "type": "build", "name": "clang-debug" },
+        { "type": "test", "name": "clang-debug" }
+      ]
+    },
+    {
+      "name": "clang-release",
+      "steps": [
+        { "type": "configure", "name": "clang-release" },
+        { "type": "build", "name": "clang-release" },
+        { "type": "test", "name": "clang-release" }
+      ]
+    },
+    {
+      "name": "clang-sanitize",
+      "steps": [
+        { "type": "configure", "name": "clang-sanitize" },
+        { "type": "build", "name": "clang-sanitize" },
+        { "type": "test", "name": "clang-sanitize" }
+      ]
+    },
+    {
+      "name": "libcxx-debug",
+      "steps": [
+        { "type": "configure", "name": "libcxx-debug" },
+        { "type": "build", "name": "libcxx-debug" },
+        { "type": "test", "name": "libcxx-debug" }
+      ]
+    },
+    {
+      "name": "libcxx-release",
+      "steps": [
+        { "type": "configure", "name": "libcxx-release" },
+        { "type": "build", "name": "libcxx-release" },
+        { "type": "test", "name": "libcxx-release" }
+      ]
+    },
+    {
+      "name": "libcxx-sanitize",
+      "steps": [
+        { "type": "configure", "name": "libcxx-sanitize" },
+        { "type": "build", "name": "libcxx-sanitize" },
+        { "type": "test", "name": "libcxx-sanitize" }
+      ]
+    },
+    {
+      "name": "msvc-debug",
+      "steps": [
+        { "type": "configure", "name": "msvc-debug" },
+        { "type": "build", "name": "msvc-debug" },
+        { "type": "test", "name": "msvc-debug" }
+      ]
+    },
+    {
+      "name": "msvc-release",
+      "steps": [
+        { "type": "configure", "name": "msvc-release" },
+        { "type": "build", "name": "msvc-release" },
+        { "type": "test", "name": "msvc-release" }
+      ]
+    },
+    {
+      "name": "msvc-asan",
+      "steps": [
+        { "type": "configure", "name": "msvc-asan" },
+        { "type": "build", "name": "msvc-asan" },
+        { "type": "test", "name": "msvc-asan" }
+      ]
+    },
+    {
+      "name": "msvc-noexcept",
+      "steps": [
+        { "type": "configure", "name": "msvc-noexcept" },
+        { "type": "build", "name": "msvc-noexcept" }
+      ]
+    },
+    {
+      "name": "apple-clang-debug",
+      "steps": [
+        { "type": "configure", "name": "apple-clang-debug" },
+        { "type": "build", "name": "apple-clang-debug" },
+        { "type": "test", "name": "apple-clang-debug" }
+      ]
+    },
+    {
+      "name": "apple-clang-release",
+      "steps": [
+        { "type": "configure", "name": "apple-clang-release" },
+        { "type": "build", "name": "apple-clang-release" },
+        { "type": "test", "name": "apple-clang-release" }
+      ]
+    },
+    {
+      "name": "apple-clang-noexcept",
+      "steps": [
+        { "type": "configure", "name": "apple-clang-noexcept" },
+        { "type": "build", "name": "apple-clang-noexcept" },
+        { "type": "test", "name": "apple-clang-noexcept" }
+      ]
+    },
+    {
+      "name": "tidy",
+      "steps": [
+        { "type": "configure", "name": "tidy" },
+        { "type": "build", "name": "tidy" }
+      ]
+    },
+    {
+      "name": "format",
+      "steps": [
+        { "type": "configure", "name": "format" },
+        { "type": "build", "name": "format" }
+      ]
+    },
+    {
+      "name": "docs",
+      "steps": [
+        { "type": "configure", "name": "docs" },
+        { "type": "build", "name": "docs" }
+      ]
+    }
+  ]
+}

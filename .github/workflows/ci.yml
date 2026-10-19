@@ -1,0 +1,475 @@
+# Builds and tests every pull request and every push to main and develop, with each compiler that
+# pedantjson supports at the oldest version the README promises and at its newest release. The `ci`
+# job is the one check that branch protection requires, and it passes only when every other job has.
+#
+# The Linux jobs run in stock images: GCC's official ones, and Debian's and Ubuntu's with Clang from
+# apt.llvm.org, which ci/linux/install-tools.sh sets up. The Windows and macOS jobs run on GitHub's
+# own images. A newest release is a version named in this file, so a new major means editing it.
+#
+# The Clang job with the sanitizers and libstdc++ also fuzzes the parser for a minute. A text that
+# crashes the fuzzer is kept with the logs of the failed job.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+# A newer run for the same branch or pull request makes an older one pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner || 'ubuntu-24.04' }}
+    timeout-minutes: 60
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The oldest compilers pedantjson supports, in release. Debian 12 carries the oldest
+          # libstdc++ with std::expected, GCC 12's, and Clang 19 is the first to define the
+          # __cpp_concepts it asks for. Clang 20's libc++ is the first that reads floating-point
+          # numbers with std::from_chars.
+          - name: GCC 12, release
+            id: gcc-12
+            image: gcc:12
+            presets: gcc-release
+          - name: Clang 19 with libstdc++, release
+            id: clang-19
+            image: debian:bookworm
+            llvm: 19
+            packages: g++
+            presets: clang-release
+          - name: Clang 20 with libc++, release
+            id: libcxx-20
+            image: ubuntu:24.04
+            llvm: 20
+            packages: g++ libc++-20-dev libc++abi-20-dev
+            presets: libcxx-release
+
+          # The newest releases, in debug with AddressSanitizer and UndefinedBehaviorSanitizer, and
+          # in release. `fuzz` names a preset whose build then runs the fuzzer.
+          - name: GCC 16, debug, ASan and UBSan
+            id: gcc-16
+            image: gcc:16
+            presets: gcc-sanitize
+          - name: GCC 16, release, with and without exceptions
+            id: gcc-16
+            image: gcc:16
+            presets: gcc-release gcc-noexcept
+          - name: GCC 16 on Arm, release
+            id: gcc-16-arm
+            runner: ubuntu-24.04-arm
+            image: gcc:16
+            presets: gcc-release
+          - name: Clang 23 with libstdc++, debug, ASan and UBSan, and a minute's fuzzing
+            id: clang-23
+            image: ubuntu:26.04
+            llvm: 23
+            packages: g++ libclang-rt-23-dev
+            presets: clang-sanitize
+            fuzz: clang-sanitize
+          - name: Clang 23 with libstdc++, release
+            id: clang-23
+            image: ubuntu:26.04
+            llvm: 23
+            packages: g++
+            presets: clang-release
+          - name: Clang 23 with libc++, debug, ASan and UBSan
+            id: libcxx-23
+            image: ubuntu:26.04
+            llvm: 23
+            packages: g++ libc++-23-dev libc++abi-23-dev libclang-rt-23-dev
+            presets: libcxx-sanitize
+          - name: Clang 23 with libc++, release
+            id: libcxx-23
+            image: ubuntu:26.04
+            llvm: 23
+            packages: g++ libc++-23-dev libc++abi-23-dev
+            presets: libcxx-release
+    defaults:
+      run:
+        shell: bash
+    env:
+      VCPKG_ROOT: /opt/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: /opt/vcpkg-cache
+      # vcpkg uses the image's CMake and Ninja rather than downloading its own, which it has none
+      # of for Arm.
+      VCPKG_FORCE_SYSTEM_BINARIES: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install the build tools
+        env:
+          LLVM_VERSION: ${{ matrix.llvm }}
+        run: ci/linux/install-tools.sh ${{ matrix.packages }}
+
+      - name: Set up vcpkg at the manifest's baseline
+        run: ci/setup-vcpkg.sh
+
+      # Jobs with one id build the same ports with the same compiler, so they share a cache.
+      - name: Restore the vcpkg binary cache
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-${{ matrix.id }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'triplets/**') }}
+          restore-keys: vcpkg-${{ matrix.id }}-
+
+      - name: Configure, build and test
+        env:
+          PRESETS: ${{ matrix.presets }}
+        run: |
+          for preset in $PRESETS; do
+            cmake --workflow --preset "$preset"
+          done
+
+      - name: Fuzz the parser
+        if: matrix.fuzz
+        env:
+          PRESET: ${{ matrix.fuzz }}
+        run: cmake --build --preset "$PRESET" --target fuzz
+
+      # Only pushes to develop save a cache, which pull requests then restore. A key is saved once,
+      # so a failed job saves nothing, or a cache missing ports would stand until the key changed.
+      - name: Save the vcpkg binary cache
+        if: >-
+          success() && steps.cache.outputs.cache-hit != 'true'
+          && github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - name: Keep the logs of a failed job
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: logs-linux-${{ strategy.job-index }}
+          path: |
+            build/*/Testing/Temporary/
+            build/*/fuzz/crashes/
+            build/*/vcpkg-manifest-install.log
+            ${{ env.VCPKG_ROOT }}/buildtrees/*/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  windows:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The oldest toolset the runners carry. Until MSVC 14.52, C++23 is the preview standard
+          # mode, which CMake chooses.
+          - name: MSVC 14.44, release
+            runner: windows-2025
+            msvc: "14.44"
+            triplet: x64-windows-static-md
+            presets: msvc-release
+          # The newest toolset on the Visual Studio 2026 image.
+          # MSVC's AddressSanitizer needs Catch2 instrumented, which vcpkg builds for release alone,
+          # so this job builds optimised against the release CRT, with assertions kept on.
+          - name: MSVC latest, ASan, with assertions
+            runner: windows-2025-vs2026
+            triplet: x64-windows-asan
+            presets: msvc-asan
+          - name: MSVC latest, release, with and without exceptions
+            runner: windows-2025-vs2026
+            triplet: x64-windows-static-md
+            presets: msvc-release msvc-noexcept
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      # The image's own clone of vcpkg, which the job moves to the manifest's baseline.
+      VCPKG_ROOT: C:\vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: C:\vcpkg-cache
+      # The tests' dependencies are built by the job's toolset; see triplets/x64-windows-static-md.
+      VCPKG_KEEP_ENV_VARS: VCToolsVersion
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up MSVC
+        id: msvc
+        env:
+          MSVC_VERSION: ${{ matrix.msvc }}
+        run: |
+          if ($env:MSVC_VERSION) {
+            ci/windows/enter-msvc.ps1 -Version $env:MSVC_VERSION
+          } else {
+            ci/windows/enter-msvc.ps1
+          }
+
+      # vcpkg reads each port's version with git in an environment of its own, which on Windows
+      # holds nothing else, so git can't reach the network for a blob a partial clone lacks. The
+      # image's clone is a full one, and fetching brings in a baseline newer than the image.
+      - name: Set up vcpkg at the manifest's baseline
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          if (-not $baseline) {
+            throw 'vcpkg.json names no builtin-baseline'
+          }
+          git -C $env:VCPKG_ROOT fetch --quiet origin
+          git -C $env:VCPKG_ROOT checkout --quiet $baseline
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+          New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+
+      # The triplet chooses how the ports are built, and the job's toolset builds them.
+      - name: Restore the vcpkg binary cache
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-${{ matrix.triplet }}-${{ steps.msvc.outputs.toolset }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'triplets/**') }}
+          restore-keys: vcpkg-${{ matrix.triplet }}-${{ steps.msvc.outputs.toolset }}-
+
+      - name: Configure, build and test
+        env:
+          PRESETS: ${{ matrix.presets }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          foreach ($preset in $env:PRESETS -split ' ') {
+            cmake --workflow --preset $preset
+          }
+
+      - name: Save the vcpkg binary cache
+        if: >-
+          success() && steps.cache.outputs.cache-hit != 'true'
+          && github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - name: Keep the logs of a failed job
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: logs-windows-${{ strategy.job-index }}
+          path: |
+            build/*/Testing/Temporary/
+            build/*/vcpkg-manifest-install.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # The files of one artifact must share a root, and vcpkg's are on another drive.
+      - name: Keep vcpkg's logs of a failed job
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vcpkg-logs-windows-${{ strategy.job-index }}
+          path: ${{ env.VCPKG_ROOT }}/buildtrees/*/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  macos:
+    name: Apple Clang from Xcode 26.4, release, with and without exceptions
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      # The oldest Xcode whose libc++ reads floating-point numbers with std::from_chars.
+      XCODE_VERSION: "26.4"
+      DEVELOPER_DIR: /Applications/Xcode_26.4.app/Contents/Developer
+      VCPKG_ROOT: /Users/runner/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: /Users/runner/vcpkg-cache
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check that the job builds with Xcode ${{ env.XCODE_VERSION }}
+        run: |
+          xcodebuild -version
+          /usr/bin/clang++ --version
+          version=$(xcodebuild -version | sed -n 's/^Xcode //p')
+          case $version in
+            "$XCODE_VERSION" | "$XCODE_VERSION".*) ;;
+            *) echo "::error::The job builds with Xcode $version, not $XCODE_VERSION"; exit 1 ;;
+          esac
+
+      - name: Set up vcpkg at the manifest's baseline
+        run: ci/setup-vcpkg.sh
+
+      - name: Restore the vcpkg binary cache
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-xcode-${{ env.XCODE_VERSION }}-${{ runner.arch }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'triplets/**') }}
+          restore-keys: vcpkg-xcode-${{ env.XCODE_VERSION }}-${{ runner.arch }}-
+
+      - name: Configure, build and test
+        run: |
+          cmake --workflow --preset apple-clang-release
+          cmake --workflow --preset apple-clang-noexcept
+
+      - name: Save the vcpkg binary cache
+        if: >-
+          success() && steps.cache.outputs.cache-hit != 'true'
+          && github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - name: Keep the logs of a failed job
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: logs-macos
+          path: |
+            build/*/Testing/Temporary/
+            build/*/vcpkg-manifest-install.log
+            ${{ env.VCPKG_ROOT }}/buildtrees/*/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  lint:
+    name: clang-format and clang-tidy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container: ubuntu:26.04
+    defaults:
+      run:
+        shell: bash
+    env:
+      VCPKG_ROOT: /opt/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: /opt/vcpkg-cache
+      VCPKG_FORCE_SYSTEM_BINARIES: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # With libFuzzer's runtime, clang-tidy reads the fuzzer too.
+      - name: Install the build tools
+        env:
+          LLVM_VERSION: 23
+        run: ci/linux/install-tools.sh g++ clang-format-23 clang-tidy-23 libclang-rt-23-dev
+
+      - name: Check the formatting
+        run: cmake --workflow --preset format
+
+      # clang-tidy reads the tests too, which need Catch2.
+      - name: Set up vcpkg at the manifest's baseline
+        run: ci/setup-vcpkg.sh
+
+      # The same ports, built by the same compiler, as the Clang 23 jobs with libstdc++.
+      - name: Restore the vcpkg binary cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-clang-23-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'triplets/**') }}
+          restore-keys: vcpkg-clang-23-
+
+      - name: Run clang-tidy
+        run: cmake --workflow --preset tidy
+
+  docs:
+    name: Doxygen
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container: ubuntu:26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install the build tools
+        run: ci/linux/install-tools.sh g++ doxygen
+
+      - name: Check that every public declaration is documented
+        run: cmake --workflow --preset docs
+
+  # A project that installs pedantjson itself and builds against it, with no vcpkg anywhere.
+  consumer-installed:
+    name: A project using the installed library, without vcpkg
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container: gcc:16
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install the build tools
+        run: ci/linux/install-tools.sh
+
+      - name: Build the library and install it
+        run: cmake --workflow --preset library
+
+      - name: Build and run a project that finds it with find_package
+        run: |
+          cmake -S tests/consumers/installed -B build/installed -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/build/library/prefix"
+          cmake --build build/installed
+          build/installed/consumer
+
+      - name: Build and run a project that finds it with pkg-config
+        run: |
+          cmake -S tests/consumers/pkg-config -B build/pkg-config -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/build/library/prefix"
+          cmake --build build/pkg-config
+          build/pkg-config/consumer
+
+  # The same project, given pedantjson by vcpkg through the overlay port in ports/.
+  consumer-vcpkg:
+    name: A project using pedantjson through vcpkg
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container: gcc:16
+    defaults:
+      run:
+        shell: bash
+    env:
+      VCPKG_ROOT: /opt/vcpkg
+      VCPKG_FORCE_SYSTEM_BINARIES: 1
+      # The port builds this checkout, which vcpkg's binary caching doesn't see, so nothing is
+      # cached or restored.
+      VCPKG_BINARY_SOURCES: clear
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install the build tools
+        run: ci/linux/install-tools.sh
+
+      - name: Set up vcpkg at the manifest's baseline
+        run: ci/setup-vcpkg.sh
+
+      - name: Build and run a project that gets pedantjson from vcpkg
+        run: |
+          cmake -S tests/consumers/installed -B build/vcpkg -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_OVERLAY_PORTS="$PWD/ports"
+          cmake --build build/vcpkg
+          build/vcpkg/consumer
+
+      - name: Keep the logs of a failed job
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: logs-consumer-vcpkg
+          path: |
+            build/vcpkg/vcpkg-manifest-install.log
+            ${{ env.VCPKG_ROOT }}/buildtrees/*/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  ci:
+    name: ci
+    if: always()
+    needs: [linux, windows, macos, lint, docs, consumer-installed, consumer-vcpkg]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check that every job passed
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: echo "$RESULTS" | jq --exit-status 'all(. == "success")'

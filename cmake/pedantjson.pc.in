@@ -1,0 +1,10 @@
+prefix=@PEDANTJSON_PC_PREFIX@
+libdir=@PEDANTJSON_PC_LIBDIR@
+includedir=@PEDANTJSON_PC_INCLUDEDIR@
+
+Name: pedantjson
+Description: @PROJECT_DESCRIPTION@
+URL: @PROJECT_HOMEPAGE_URL@
+Version: @PROJECT_VERSION@
+Cflags: -I${includedir}
+Libs: -L${libdir} -lpedantjson
