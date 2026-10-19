@@ -360,7 +360,11 @@ class Parser {
             }
         }
         storage_->nodes.push_back(detail::Node{
-            .kind = Kind::number, .offset = first, .first = first, .size = offset_ - first});
+            .kind = Kind::number,
+            .offset = first,
+            .first = first,
+            .size = offset_ - first,
+        });
         return {};
     }
 

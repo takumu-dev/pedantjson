@@ -94,8 +94,10 @@ Member Object::operator[](std::size_t index) const {
     const std::size_t key = storage_->child(first_ + (2 * index));
     const std::size_t value = storage_->child(first_ + (2 * index) + 1);
     const detail::Node& key_node = storage_->node(key);
-    return {.key = Key{storage_->characters(key_node), key_node.offset},
-            .value = Value{storage_, value}};
+    return {
+        .key = Key{storage_->characters(key_node), key_node.offset},
+        .value = Value{storage_, value},
+    };
 }
 
 std::optional<Member> Object::find(std::string_view name) const noexcept {
