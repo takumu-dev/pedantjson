@@ -7,19 +7,20 @@
 
 pedantjson is a strict JSON reader for C++23. It reads a text into an immutable tree that
 remembers where everything came from: every key and every value carries the byte offset where it
-begins, an object's members keep the order the text gives them, every duplicate name included, and
-a number keeps the text it was written as. A text that isn't JSON gives an error that says what is
-wrong and where.
+begins, which the document turns into a line and a column, an object's members keep the order the
+text gives them, every duplicate name included, and a number keeps the text it was written as. A
+text that isn't JSON gives an error that says what is wrong, on which line and in which column.
 
 It is meant for formats written by hand, whose readers have to point at each mistake precisely: a
 parser that quietly keeps the last of two duplicate keys, or forgets where a value came from, can't
 do that.
 
-pedantjson is at an early stage, and has no release yet. Today it reads the grammar of
+pedantjson is at an early stage, and has no release yet. It reads the grammar of
 [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) strictly, rejecting every text the RFC forbids
-and deciding each case the RFC leaves open, as [Strictness](#strictness) describes, and it reads
-a number into the type a caller asks for, catching a value beyond that type's range. Still to come
-are lines and columns, and JSON pointers.
+and deciding each case the RFC leaves open, as [Strictness](#strictness) describes. It reads a
+number into the type a caller asks for, catching a value beyond that type's range, and it builds
+and looks up [RFC 6901](https://www.rfc-editor.org/rfc/rfc6901) JSON pointers, finding for a value
+the text never wrote the nearest value it did.
 
 ## Example
 
@@ -29,24 +30,36 @@ are lines and columns, and JSON pointers.
 #include <iostream>
 
 int main() {
-    const auto document = pedantjson::parse(R"({"width": 1, "width": 2})");
+    const auto document = pedantjson::parse(R"({
+  "width": 1,
+  "width": 2,
+  "margins": {"top": 4}
+})");
     if (!document) {
-        std::cerr << "offset " << document.error().offset << ": " << document.error().message()
-                  << '\n';
+        const auto& error = document.error();
+        std::cerr << error.position.line << ':' << error.position.column << ": "
+                  << error.message() << '\n';
         return 1;
     }
+    // Every member is kept, a repeated name's too, with the position of its key.
     for (const auto [key, value] : *document->root().as_object()) {
-        std::cout << key.name() << " at offset " << key.offset() << " is "
-                  << value.as_number()->text() << '\n';
+        const auto position = document->position(key.offset());
+        std::cout << position.line << ':' << position.column << ": " << key.name() << '\n';
     }
+    // A member the text leaves out takes the position of the nearest value the text has.
+    const auto bottom = pedantjson::Pointer{} / "margins" / "bottom";
+    const auto position = document->position(document->nearest(bottom).offset());
+    std::cout << position.line << ':' << position.column << ": no " << bottom.text() << '\n';
 }
 ```
 
 This prints:
 
 ```text
-width at offset 1 is 1
-width at offset 13 is 2
+2:3: width
+3:3: width
+4:3: margins
+4:14: no /margins/bottom
 ```
 
 ## The interface
@@ -56,6 +69,10 @@ Everything is in namespace `pedantjson`, in the one header `<pedantjson/pedantjs
 - `parse(std::string text, ParseOptions = {})` returns a `std::expected<Document, SyntaxError>`.
   `ParseOptions::max_depth` limits how deeply arrays and objects may nest.
 - A `Document` owns the text and the tree read from it. It can be moved but not copied.
+  `position(offset)` gives the `Position` of any offset in the text: its `line` and its `column`,
+  each counting from 1. A line ends at a line feed, a carriage return, or both together. A column
+  counts code points rather than bytes, a tab being one, and a byte-order mark at the start of the
+  text takes none, as an editor shows it.
 - A `Value` is a cheap handle into a document, valid while the document lives, through any move of
   it. `kind()` says which of `null`, `boolean`, `number`, `string`, `array` or `object` it is, and
   `offset()` where it begins. Its accessors `as_bool()`, `as_number()`, `as_string()`,
@@ -67,8 +84,19 @@ Everything is in namespace `pedantjson`, in the one header `<pedantjson/pedantjs
 - A `Number` keeps its text, exactly as written. `to<T>()` reads it into any standard integer
   type, `float` or `double`, and returns a `std::expected<T, NumberError>`. `is_integer()` says
   whether its value is an integer.
+- A `Pointer` is a JSON pointer, as RFC 6901 defines one, that owns its text. `/` appends a
+  member's name or an element's index, escaping a name's `~` and `/`, so `Pointer{} / "a/b" / 0`
+  is `/a~1b/0`. `Pointer::parse(text)` reads one from its text, returning a
+  `std::expected<Pointer, PointerError>`, and `text()` gives the text back.
+- `Document::find(pointer)` answers the value a pointer names, if the document has it, following a
+  repeated name to its first member. `Document::nearest(pointer)` answers the deepest value on the
+  pointer's way that the document has, the root at worst, whose position a value the text never
+  wrote can take.
 - A `NumberError` has a `code`, `out_of_range` or `not_an_integer`, and a `message()`.
-- A `SyntaxError` has a `code`, the `offset` where the text stops being JSON, and a `message()`.
+- A `PointerError` has a `code`, `missing_slash` or `invalid_escape`, the `offset` where the text
+  stops being a pointer, and a `message()`.
+- A `SyntaxError` has a `code`, the `offset` where the text stops being JSON, the `position` of
+  that offset, and a `message()`.
 
 ## Strictness
 

@@ -1,8 +1,10 @@
 #include "storage.hpp"
 #include <pedantjson/pedantjson.hpp>
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -16,6 +18,24 @@ namespace {
 const detail::Node* node_of_kind(const detail::Storage& storage, std::size_t index, Kind kind) {
     const detail::Node& node = storage.node(index);
     return node.kind == kind ? &node : nullptr;
+}
+
+/// The length of a character in a text known to be UTF-8, from its first byte alone.
+///
+/// \param first The character's first byte.
+/// \return Its length in bytes.
+std::size_t character_length(char first) noexcept {
+    const auto byte = static_cast<unsigned char>(first);
+    if (byte >= 0xf0) {
+        return 4;
+    }
+    if (byte >= 0xe0) {
+        return 3;
+    }
+    if (byte >= 0xc0) {
+        return 2;
+    }
+    return 1;
 }
 
 } // namespace
@@ -129,6 +149,38 @@ Value Document::root() const {
     // NOLINTNEXTLINE(misc-static-assert): the condition depends on the document's state
     assert(storage_ != nullptr && "the document hasn't been moved from");
     return {storage_.get(), 0};
+}
+
+Position Document::position(std::size_t offset) const {
+    // NOLINTNEXTLINE(misc-static-assert): the condition depends on the document's state
+    assert(storage_ != nullptr && "the document hasn't been moved from");
+    return storage_->position(offset);
+}
+
+Position detail::Storage::position(std::size_t offset) const noexcept {
+    offset = std::min(offset, text.size());
+    // The last line that begins at or before the offset. Only an offset within a byte-order mark
+    // comes before the first line, and the mark takes no column.
+    const auto after = std::ranges::upper_bound(line_starts, offset);
+    if (after == line_starts.begin()) {
+        return {.line = 1, .column = 1};
+    }
+    const auto line = static_cast<std::size_t>(after - line_starts.begin());
+    // The column is one more than the number of characters that end before the offset. Each
+    // character's first byte gives its length, and the text before the offset is UTF-8, since the
+    // parser stops at the first byte that isn't. Every byte read is before the offset, which is
+    // within the text.
+    std::size_t column = 1;
+    std::size_t at = *std::prev(after);
+    while (at < offset) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): see above
+        at += character_length(text[at]);
+        // A character that the offset falls within doesn't end before it.
+        if (at <= offset) {
+            ++column;
+        }
+    }
+    return {.line = line, .column = column};
 }
 
 } // namespace pedantjson

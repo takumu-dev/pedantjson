@@ -440,6 +440,22 @@ class Object {
     std::size_t size_ = 0;
 };
 
+/// Where something is in a text, as an editor shows it: a line and a column.
+struct Position {
+    /// The line, counting from 1. A line ends at a line feed, at a carriage return, or at a
+    /// carriage return and a line feed together.
+    std::size_t line;
+
+    /// The column, counting from 1, in Unicode code points rather than bytes, a tab being one.
+    std::size_t column;
+
+    /// Whether two positions are the same line and column.
+    ///
+    /// \param other The other position.
+    /// \return Whether they are.
+    [[nodiscard]] bool operator==(const Position& other) const noexcept = default;
+};
+
 /// What kind of mistake makes a text something other than JSON.
 enum class SyntaxErrorCode : std::uint8_t {
     empty_input,                 ///< The text holds no value, only whitespace or nothing at all.
@@ -467,6 +483,10 @@ struct SyntaxError {
     /// as JSON, or the size of the text when it ends too soon.
     std::size_t offset;
 
+    /// The line and the column of the offset, worked out when the error is found, since there is
+    /// no document to ask afterwards.
+    Position position;
+
     /// What kind of mistake it is, in words, such as `unexpected end of the text`.
     ///
     /// \return A fixed message for the code, in lower case with no full stop.
@@ -479,6 +499,96 @@ struct ParseOptions {
     /// too deep. The parser doesn't recurse, so no nesting can overflow its stack; the limit keeps
     /// a program that walks the document by recursion from overflowing its own.
     std::size_t max_depth = 256;
+};
+
+/// What kind of mistake makes a text something other than a JSON pointer.
+enum class PointerErrorCode : std::uint8_t {
+    missing_slash,  ///< A text that isn't empty but doesn't begin with `/`.
+    invalid_escape, ///< A `~` that isn't followed by `0` or `1`.
+};
+
+/// Why a text isn't a JSON pointer, and where.
+struct PointerError {
+    /// What kind of mistake it is.
+    PointerErrorCode code;
+
+    /// Where the text stops being a pointer: the offset in bytes of its first character, or of the
+    /// `~` that begins an invalid escape.
+    std::size_t offset;
+
+    /// What kind of mistake it is, in words, such as `invalid escape in a pointer`.
+    ///
+    /// \return A fixed message for the code, in lower case with no full stop.
+    [[nodiscard]] std::string_view message() const noexcept;
+};
+
+/// A JSON pointer, as RFC 6901 defines one: the way to a value from the root of a document, as a
+/// slash before each member's name or element's index on the way, such as `/windows/0/size`.
+///
+/// It owns its text, with each name's `~` and `/` escaped as `~0` and `~1`. A pointer is built from
+/// the root by appending a name or an index with `/`, or read from its text with `parse`, and a
+/// document looks one up with `find` or `nearest`, comparing each name byte for byte with the names
+/// its keys decode to.
+class Pointer {
+  public:
+    /// Creates the pointer to the whole document, whose text is empty.
+    Pointer() = default;
+
+    /// Reads a pointer from its text, as RFC 6901 writes it.
+    ///
+    /// The text isn't checked for UTF-8: a name that isn't UTF-8 names no member of any document,
+    /// since the names of a document all are.
+    ///
+    /// \param text The text, such as `/a~1b/0`: empty, or a slash before each escaped name or
+    ///             index.
+    /// \return The pointer, or the first mistake that makes the text something other than one.
+    [[nodiscard]] static std::expected<Pointer, PointerError> parse(std::string_view text);
+
+    /// The pointer's text, as RFC 6901 writes it, such as `/a~1b/0` for the element 0 of the
+    /// member `a/b`.
+    ///
+    /// \return A view of the text, valid as long as the pointer is and isn't changed.
+    [[nodiscard]] std::string_view text() const noexcept { return text_; }
+
+    /// Whether two pointers are the same, as they are when their texts are.
+    ///
+    /// \param other The other pointer.
+    /// \return Whether they are.
+    [[nodiscard]] bool operator==(const Pointer& other) const noexcept = default;
+
+    /// The pointer to a member of the object that `pointer` names.
+    ///
+    /// \param pointer The pointer to the object.
+    /// \param name The member's name, which is escaped in the pointer's text.
+    /// \return The pointer to the member.
+    [[nodiscard]] friend Pointer operator/(Pointer pointer, std::string_view name) {
+        pointer.append_name(name);
+        return pointer;
+    }
+
+    /// The pointer to an element of the array that `pointer` names.
+    ///
+    /// \param pointer The pointer to the array.
+    /// \param index The element's index, counting from 0.
+    /// \return The pointer to the element.
+    [[nodiscard]] friend Pointer operator/(Pointer pointer, std::size_t index) {
+        pointer.append_index(index);
+        return pointer;
+    }
+
+  private:
+    /// Appends a slash and a member's name, escaped.
+    ///
+    /// \param name The name.
+    void append_name(std::string_view name);
+
+    /// Appends a slash and an element's index.
+    ///
+    /// \param index The index.
+    void append_index(std::size_t index);
+
+    /// The pointer's text, its names escaped.
+    std::string text_;
 };
 
 /// A JSON text read into an immutable tree.
@@ -515,6 +625,38 @@ class Document {
     ///
     /// \return The outermost value.
     [[nodiscard]] Value root() const;
+
+    /// The line and the column of an offset in the text. The document must not have been moved
+    /// from.
+    ///
+    /// \param offset The offset in bytes from the start of the text, such as a value's. An offset
+    ///               within a character is in that character's column, and one beyond the end of
+    ///               the text is taken as its end.
+    /// \return Its position.
+    [[nodiscard]] Position position(std::size_t offset) const;
+
+    /// The value a pointer names, if the document has it. The document must not have been moved
+    /// from.
+    ///
+    /// A name that an object holds more than once leads to its first member, as `Object::find`
+    /// answers. An index is written in digits, with no zero in front unless it is 0 itself, and
+    /// `-`, which RFC 6901 gives the element after the last, names nothing.
+    ///
+    /// \param pointer The pointer.
+    /// \return The value, or nothing if the document has no value there.
+    [[nodiscard]] std::optional<Value> find(const Pointer& pointer) const;
+
+    /// The deepest value on the way to the one a pointer names that the document has: the value
+    /// itself if the document has it, and the root at worst. The document must not have been moved
+    /// from.
+    ///
+    /// A value the text never wrote, such as a member left out for its default, has no position of
+    /// its own, and can take that of the nearest value the text did write. The way is followed as
+    /// `find` follows it.
+    ///
+    /// \param pointer The pointer.
+    /// \return The value.
+    [[nodiscard]] Value nearest(const Pointer& pointer) const;
 
   private:
     friend std::expected<Document, SyntaxError> parse(std::string text, ParseOptions options);

@@ -89,7 +89,8 @@ TEST_CASE("every code has a message of its own", "[syntax errors]") {
     };
     std::set<std::string_view> messages;
     for (const auto code : codes) {
-        const std::string_view message = SyntaxError{.code = code, .offset = 0}.message();
+        const std::string_view message =
+            SyntaxError{.code = code, .offset = 0, .position = {}}.message();
         CAPTURE(code, message);
         CHECK_FALSE(message.empty());
         messages.insert(message);

@@ -22,6 +22,9 @@ CATCH_REGISTER_ENUM(
     pedantjson::SyntaxErrorCode::invalid_utf8, pedantjson::SyntaxErrorCode::too_deep,
     pedantjson::SyntaxErrorCode::trailing_content)
 
+CATCH_REGISTER_ENUM(pedantjson::PointerErrorCode, pedantjson::PointerErrorCode::missing_slash,
+                    pedantjson::PointerErrorCode::invalid_escape)
+
 CATCH_REGISTER_ENUM(pedantjson::NumberErrorCode, pedantjson::NumberErrorCode::out_of_range,
                     pedantjson::NumberErrorCode::not_an_integer)
 
@@ -30,6 +33,20 @@ template <typename T> struct Catch::StringMaker<std::expected<T, pedantjson::Num
     static std::string convert(const std::expected<T, pedantjson::NumberError>& number) {
         return number ? Catch::Detail::stringify(*number)
                       : Catch::Detail::stringify(number.error().code);
+    }
+};
+
+/// Prints a position as its line and its column, such as `3:7`.
+template <> struct Catch::StringMaker<pedantjson::Position> {
+    static std::string convert(const pedantjson::Position& position) {
+        return std::to_string(position.line) + ":" + std::to_string(position.column);
+    }
+};
+
+/// Prints a pointer as its text.
+template <> struct Catch::StringMaker<pedantjson::Pointer> {
+    static std::string convert(const pedantjson::Pointer& pointer) {
+        return Catch::Detail::stringify(pointer.text());
     }
 };
 

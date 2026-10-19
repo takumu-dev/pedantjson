@@ -9,10 +9,13 @@ add_executable(pedantjson_tests
     encoding_tests.cpp
     json_test_suite_tests.cpp
     literal_tests.cpp
+    lookup_tests.cpp
     nesting_tests.cpp
     number_conversion_tests.cpp
     number_tests.cpp
     object_tests.cpp
+    pointer_tests.cpp
+    position_tests.cpp
     string_value_tests.cpp
     syntax_error_tests.cpp
 )
