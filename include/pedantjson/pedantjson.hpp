@@ -174,7 +174,9 @@ class Number {
     ///
     /// \tparam T The type to read it into.
     /// \return The number, or why `T` can't hold it.
-    template <NumberType T> [[nodiscard]] std::expected<T, NumberError> to() const noexcept;
+    template <NumberType T> [[nodiscard]] std::expected<T, NumberError> to() const noexcept {
+        return read<T>();
+    }
 
   private:
     friend class Value;
@@ -184,6 +186,16 @@ class Number {
     /// \param text A view into the document's text.
     explicit Number(std::string_view text) noexcept : text_(text) {}
 
+    /// The number read into the type `T`, as `to` describes, by the library's code for that type.
+    ///
+    /// It isn't constrained, though only a `NumberType` reads, since GCC and Clang mangle a
+    /// constraint into the name of an instantiation differently. Without one, the library that
+    /// either compiler builds links into a program that the other builds.
+    ///
+    /// \tparam T The type to read it into, a `NumberType`.
+    /// \return The number, or why `T` can't hold it.
+    template <typename T> [[nodiscard]] std::expected<T, NumberError> read() const noexcept;
+
     /// The number as the text writes it.
     std::string_view text_;
 };
@@ -191,22 +203,23 @@ class Number {
 // The library holds the code that reads each type, compiled once. Declaring it here tells a
 // caller's compiler that the definition is elsewhere on purpose, which Clang's
 // -Wundefined-func-template would otherwise warn of.
-extern template std::expected<signed char, NumberError> Number::to<signed char>() const noexcept;
-extern template std::expected<short, NumberError> Number::to<short>() const noexcept;
-extern template std::expected<int, NumberError> Number::to<int>() const noexcept;
-extern template std::expected<long, NumberError> Number::to<long>() const noexcept;
-extern template std::expected<long long, NumberError> Number::to<long long>() const noexcept;
+extern template std::expected<signed char, NumberError> Number::read<signed char>() const noexcept;
+extern template std::expected<short, NumberError> Number::read<short>() const noexcept;
+extern template std::expected<int, NumberError> Number::read<int>() const noexcept;
+extern template std::expected<long, NumberError> Number::read<long>() const noexcept;
+extern template std::expected<long long, NumberError> Number::read<long long>() const noexcept;
 extern template std::expected<unsigned char, NumberError>
-Number::to<unsigned char>() const noexcept;
+Number::read<unsigned char>() const noexcept;
 extern template std::expected<unsigned short, NumberError>
-Number::to<unsigned short>() const noexcept;
-extern template std::expected<unsigned int, NumberError> Number::to<unsigned int>() const noexcept;
+Number::read<unsigned short>() const noexcept;
+extern template std::expected<unsigned int, NumberError>
+Number::read<unsigned int>() const noexcept;
 extern template std::expected<unsigned long, NumberError>
-Number::to<unsigned long>() const noexcept;
+Number::read<unsigned long>() const noexcept;
 extern template std::expected<unsigned long long, NumberError>
-Number::to<unsigned long long>() const noexcept;
-extern template std::expected<float, NumberError> Number::to<float>() const noexcept;
-extern template std::expected<double, NumberError> Number::to<double>() const noexcept;
+Number::read<unsigned long long>() const noexcept;
+extern template std::expected<float, NumberError> Number::read<float>() const noexcept;
+extern template std::expected<double, NumberError> Number::read<double>() const noexcept;
 
 /// A handle to one value of a document.
 ///
