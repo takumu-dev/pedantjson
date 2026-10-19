@@ -7,6 +7,8 @@ the form of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions f
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-19
+
 ### Added
 
 - `parse`, which reads a text strictly as [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259)
@@ -33,4 +35,5 @@ the form of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions f
   library builds with exceptions enabled or disabled, with GCC 12, Clang 19 with libstdc++,
   Clang 20 with libc++, MSVC 14.44, Apple Clang from Xcode 26.4, and newer.
 
-[Unreleased]: https://github.com/takumu-dev/pedantjson/commits/develop
+[Unreleased]: https://github.com/takumu-dev/pedantjson/compare/0.1.0...HEAD
+[0.1.0]: https://github.com/takumu-dev/pedantjson/releases/tag/0.1.0
