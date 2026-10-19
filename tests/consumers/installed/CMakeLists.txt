@@ -3,6 +3,10 @@ cmake_minimum_required(VERSION 3.28)
 
 project(pedantjson_installed_consumer LANGUAGES CXX)
 
+# Like most projects, this one uses no C++ modules, so it isn't scanned for them, which with Clang
+# would take clang-scan-deps.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+
 find_package(pedantjson CONFIG REQUIRED)
 
 # pedantjson's warnings and warnings as errors are its own, and must not reach a project's build.

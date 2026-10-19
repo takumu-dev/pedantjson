@@ -5,6 +5,17 @@
 set(prefix "${CMAKE_CURRENT_BINARY_DIR}/prefix")
 set(builds "${CMAKE_CURRENT_BINARY_DIR}/builds")
 
+# The flags of this build's type go too, since a preset may replace the defaults, as one that
+# builds with AddressSanitizer drops MSVC's /RTC1, which the sanitizer refuses.
+set(config_flags "")
+if(CMAKE_BUILD_TYPE)
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" config)
+    set(config_flags
+        "-DCMAKE_CXX_FLAGS_${config}=${CMAKE_CXX_FLAGS_${config}}"
+        "-DCMAKE_EXE_LINKER_FLAGS_${config}=${CMAKE_EXE_LINKER_FLAGS_${config}}"
+    )
+endif()
+
 # Every run starts from nothing, so that no file installed and no cache written by an earlier run
 # can stand in for what this one should make.
 add_test(NAME "consumers: earlier installs and consumer builds are removed"
@@ -35,6 +46,7 @@ function(pedantjson_add_consumer_test name source_dir)
                 "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
                 "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}"
                 "-DCMAKE_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
+                ${config_flags}
                 ${arg_OPTIONS}
             --test-command consumer
     )
