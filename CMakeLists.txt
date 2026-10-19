@@ -16,6 +16,9 @@ include(PedantjsonConventions)
 
 # A project that adds pedantjson as a subproject gets the library alone.
 option(PEDANTJSON_BUILD_TESTS "Build pedantjson's tests." ${PROJECT_IS_TOP_LEVEL})
+option(PEDANTJSON_BUILD_FUZZER "Build pedantjson's fuzzer, where the compiler can link libFuzzer."
+    ${PROJECT_IS_TOP_LEVEL}
+)
 option(PEDANTJSON_INSTALL "Install pedantjson's header, library and package files."
     ${PROJECT_IS_TOP_LEVEL}
 )
@@ -49,6 +52,10 @@ pedantjson_target_conventions(pedantjson)
 if(PEDANTJSON_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(PEDANTJSON_BUILD_FUZZER)
+    add_subdirectory(fuzz)
 endif()
 
 if(PEDANTJSON_INSTALL)

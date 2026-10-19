@@ -7,6 +7,7 @@ cmake_path(GET ports_dir PARENT_PATH SOURCE_PATH)
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
+        -DPEDANTJSON_BUILD_FUZZER=OFF
         -DPEDANTJSON_BUILD_TESTS=OFF
 )
 vcpkg_cmake_install()

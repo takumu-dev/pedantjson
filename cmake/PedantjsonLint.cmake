@@ -11,6 +11,7 @@ include_guard(GLOBAL)
 find_program(PEDANTJSON_CLANG_FORMAT clang-format)
 if(PEDANTJSON_CLANG_FORMAT)
     file(GLOB_RECURSE sources CONFIGURE_DEPENDS
+        "${PROJECT_SOURCE_DIR}/fuzz/*.cpp"
         "${PROJECT_SOURCE_DIR}/include/*.hpp"
         "${PROJECT_SOURCE_DIR}/src/*.cpp"
         "${PROJECT_SOURCE_DIR}/src/*.hpp"
