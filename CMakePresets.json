@@ -126,10 +126,11 @@
     {
       "name": "lint",
       "hidden": true,
-      "description": "Checks that build nothing, so they need neither vcpkg nor the tests.",
+      "description": "Checks that build nothing, so they need neither vcpkg, the tests nor the fuzzer.",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
+        "PEDANTJSON_BUILD_FUZZER": false,
         "PEDANTJSON_BUILD_TESTS": false,
         "PEDANTJSON_INSTALL": false
       }
@@ -137,13 +138,14 @@
     {
       "name": "library",
       "displayName": "The library alone, release, installed without vcpkg",
-      "description": "Builds the library as a project that installs it from its source would, with no vcpkg and no tests, and installs it into build/library/prefix.",
+      "description": "Builds the library as a project that installs it from its source would, with no vcpkg, tests or fuzzer, and installs it into build/library/prefix.",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "installDir": "${sourceDir}/build/${presetName}/prefix",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_COMPILE_WARNING_AS_ERROR": true,
+        "PEDANTJSON_BUILD_FUZZER": false,
         "PEDANTJSON_BUILD_TESTS": false
       }
     },
@@ -257,7 +259,7 @@
       "name": "tidy",
       "inherits": ["clang", "debug"],
       "displayName": "clang-tidy",
-      "description": "Builds the library and the tests with clang-tidy run on every source.",
+      "description": "Builds the library, the tests and, where libFuzzer links, the fuzzer, with clang-tidy run on every source.",
       "cacheVariables": {
         "CMAKE_CXX_CLANG_TIDY": "clang-tidy"
       }

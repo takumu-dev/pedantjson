@@ -16,6 +16,9 @@ include(PedantjsonConventions)
 
 # A project that adds pedantjson as a subproject gets the library alone.
 option(PEDANTJSON_BUILD_TESTS "Build pedantjson's tests." ${PROJECT_IS_TOP_LEVEL})
+option(PEDANTJSON_BUILD_FUZZER "Build pedantjson's fuzzer, where the compiler can link libFuzzer."
+    ${PROJECT_IS_TOP_LEVEL}
+)
 option(PEDANTJSON_INSTALL "Install pedantjson's header, library and package files."
     ${PROJECT_IS_TOP_LEVEL}
 )
@@ -24,31 +27,42 @@ option(PEDANTJSON_EXCEPTIONS
     ON
 )
 
-add_library(pedantjson STATIC)
+# Adds the library as the static library `target`. The fuzzer adds a copy of its own, which it
+# builds with coverage instrumentation.
+function(pedantjson_add_library target)
+    set(dir "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
+    add_library(${target} STATIC)
+    target_sources(${target}
+        PRIVATE
+            "${dir}/src/document.cpp"
+            "${dir}/src/number.cpp"
+            "${dir}/src/parse.cpp"
+            "${dir}/src/pointer.cpp"
+            "${dir}/src/storage.hpp"
+        PUBLIC
+            FILE_SET HEADERS
+            BASE_DIRS "${dir}/include"
+            FILES "${dir}/include/pedantjson/pedantjson.hpp"
+    )
+    target_compile_features(${target} PUBLIC cxx_std_23)
+    # Standard C++ with no extensions, and no scanning for C++ modules, which pedantjson doesn't use.
+    set_target_properties(${target} PROPERTIES
+        CXX_EXTENSIONS OFF
+        CXX_SCAN_FOR_MODULES OFF
+    )
+    pedantjson_target_conventions(${target})
+endfunction()
+
+pedantjson_add_library(pedantjson)
 add_library(pedantjson::pedantjson ALIAS pedantjson)
-target_sources(pedantjson
-    PRIVATE
-        src/document.cpp
-        src/number.cpp
-        src/parse.cpp
-        src/pointer.cpp
-        src/storage.hpp
-    PUBLIC
-        FILE_SET HEADERS
-        BASE_DIRS include
-        FILES include/pedantjson/pedantjson.hpp
-)
-target_compile_features(pedantjson PUBLIC cxx_std_23)
-# Standard C++ with no extensions, and no scanning for C++ modules, which pedantjson doesn't use.
-set_target_properties(pedantjson PROPERTIES
-    CXX_EXTENSIONS OFF
-    CXX_SCAN_FOR_MODULES OFF
-)
-pedantjson_target_conventions(pedantjson)
 
 if(PEDANTJSON_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(PEDANTJSON_BUILD_FUZZER)
+    add_subdirectory(fuzz)
 endif()
 
 if(PEDANTJSON_INSTALL)

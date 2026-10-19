@@ -179,12 +179,13 @@ add_subdirectory(external/pedantjson)
 target_link_libraries(app PRIVATE pedantjson::pedantjson)
 ```
 
-As a subproject, pedantjson builds the library alone, without its tests or install rules. These
-options change what it builds:
+As a subproject, pedantjson builds the library alone, without its tests, fuzzer or install rules.
+These options change what it builds:
 
 | Option | Default | Effect |
 |---|---|---|
 | `PEDANTJSON_BUILD_TESTS` | on as the top-level project | Build the tests. |
+| `PEDANTJSON_BUILD_FUZZER` | on as the top-level project | Build the fuzzer, where the compiler can link libFuzzer. |
 | `PEDANTJSON_INSTALL` | on as the top-level project | Install the header, the library and the package files. |
 | `PEDANTJSON_EXCEPTIONS` | on | Build the library with exceptions enabled. |
 
@@ -218,13 +219,27 @@ The presets take Catch2 from the vcpkg manifest, with `VCPKG_ROOT` naming a clon
 Once the `format` preset is configured, `cmake --build --preset format --target format` formats
 every source in place.
 
+`fuzz/` holds a [libFuzzer](https://llvm.org/docs/LibFuzzer.html) target, which feeds the parser
+texts it makes up and checks what the header promises of each. It is built where the compiler is a
+Clang that can link libFuzzer's runtime, and its `fuzz` target runs it for a minute, starting from
+the texts of JSONTestSuite and of `fuzz/corpus/`:
+
+```sh
+cmake --workflow --preset clang-sanitize
+cmake --build --preset clang-sanitize --target fuzz
+```
+
+`PEDANTJSON_FUZZ_SECONDS` sets how long it runs. A text that crashes it is written into
+`build/clang-sanitize/fuzz/crashes/`, and is then committed to `fuzz/corpus/` with a test of its
+own, as `CODING_STANDARDS.md` describes.
+
 - `CODING_STANDARDS.md` says how the code is written, tested and committed.
 - `tests/consumers/` builds a small program against the installed package, through pkg-config, and
   as a subproject.
 - `ports/pedantjson/` is a vcpkg port that builds the source tree it sits in, through which CI
   builds the same program with vcpkg.
 - `.github/workflows/ci.yml` builds and tests every pull request with each compiler above, at its
-  oldest version and its newest release.
+  oldest version and its newest release, and fuzzes the parser for a minute.
 
 ## Acknowledgements
 

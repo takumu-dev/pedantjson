@@ -133,6 +133,10 @@ departs from them, it says so.
 - A test's JSON text is written in C++, as a raw string where it can be. Check the bytes of any test
   text that holds a `\u` escape, since a tool that decodes it on the way into the file leaves a
   test that can't fail.
+- A text that crashes the fuzzer, or breaks a promise it checks, is committed to `fuzz/corpus/`,
+  where every later run of the fuzzer starts from it, and becomes a Catch2 test named for what it
+  shows, in the test file of the part it concerns. The fuzzer runs with Clang alone, and the test
+  with every compiler.
 - `tests/consumers/` builds a small program against the installed package, through pkg-config, and
   against the source tree as a subproject. Each run starts from an empty prefix and empty build
   trees, so that nothing an earlier run left can stand in for what this one should make.
