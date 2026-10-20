@@ -1,0 +1,442 @@
+# Builds and tests every pull request and every push to main and develop, with each compiler that
+# pedantjson supports at the oldest version the README promises and at its newest release. The `ci`
+# job is the one check that branch protection requires, as the status `ci/circleci: ci`, and it runs
+# only once every other job has passed.
+#
+# The Linux jobs run in stock images on CircleCI's Docker executor: GCC's official ones, and
+# Debian's and Ubuntu's with Clang from apt.llvm.org, which ci/linux/install-tools.sh sets up. The
+# macOS job runs on CircleCI's Xcode image. The Windows jobs run on a self-hosted runner, a machine
+# that keeps each MSVC toolset they build with installed, and vcpkg's clone and binary cache
+# between jobs. A newest release is a version named in this file, so a new major means editing it.
+#
+# The Clang job with the sanitizers and libstdc++ also fuzzes the parser for a minute. A text that
+# crashes the fuzzer is kept with the logs of the failed job.
+version: 2.1
+
+executors:
+  # A stock Linux image, whose jobs run as its root.
+  linux:
+    parameters:
+      image:
+        type: string
+      resource-class:
+        type: string
+        default: medium
+    docker:
+      - image: << parameters.image >>
+    resource_class: << parameters.resource-class >>
+    environment:
+      VCPKG_ROOT: /opt/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: /opt/vcpkg-cache
+      # vcpkg uses the image's CMake and Ninja rather than downloading its own, which it has none
+      # of for Arm.
+      VCPKG_FORCE_SYSTEM_BINARIES: "1"
+
+commands:
+  # Jobs with one id build the same ports with the same compiler, so they share a cache.
+  restore-vcpkg-cache:
+    parameters:
+      id:
+        type: string
+    steps:
+      - run:
+          name: Hash what vcpkg builds the ports from
+          command: |
+            cat vcpkg.json vcpkg-configuration.json $(find triplets -type f | sort) \
+              > /tmp/vcpkg-inputs
+      - restore_cache:
+          name: Restore the vcpkg binary cache
+          keys:
+            - vcpkg-<< parameters.id >>-{{ checksum "/tmp/vcpkg-inputs" }}
+            - vcpkg-<< parameters.id >>-
+
+  # Only pushes to develop save a cache, which pull requests then restore. A key is saved once, and
+  # a failed job saves nothing, or a cache missing ports would stand until the key changed.
+  save-vcpkg-cache:
+    parameters:
+      id:
+        type: string
+      path:
+        type: string
+        default: /opt/vcpkg-cache
+    steps:
+      - when:
+          condition:
+            equal: [develop, << pipeline.git.branch >>]
+          steps:
+            - save_cache:
+                name: Save the vcpkg binary cache
+                key: vcpkg-<< parameters.id >>-{{ checksum "/tmp/vcpkg-inputs" }}
+                paths:
+                  - << parameters.path >>
+
+  # store_artifacts runs whether the job failed or not, and finds nothing to keep unless it did.
+  keep-logs:
+    steps:
+      - run:
+          name: Gather the logs of a failed job
+          when: on_fail
+          command: ci/gather-logs.sh logs
+      - store_artifacts:
+          path: logs
+
+jobs:
+  linux:
+    parameters:
+      image:
+        type: string
+      resource-class:
+        type: string
+        default: medium
+      llvm:
+        description: The Clang to install from apt.llvm.org, if any.
+        type: string
+        default: ""
+      packages:
+        type: string
+        default: ""
+      cache-id:
+        type: string
+      presets:
+        type: string
+      fuzz:
+        description: A preset whose build then runs the fuzzer, if any.
+        type: string
+        default: ""
+    executor:
+      name: linux
+      image: << parameters.image >>
+      resource-class: << parameters.resource-class >>
+    steps:
+      - checkout
+      - run:
+          name: Install the build tools
+          command: |
+            LLVM_VERSION=<< parameters.llvm >> ci/linux/install-tools.sh << parameters.packages >>
+      - run:
+          name: Set up vcpkg at the manifest's baseline
+          command: ci/setup-vcpkg.sh
+      - restore-vcpkg-cache:
+          id: << parameters.cache-id >>
+      - run:
+          name: Configure, build and test
+          command: |
+            for preset in << parameters.presets >>; do
+              cmake --workflow --preset "$preset"
+            done
+      - when:
+          condition: << parameters.fuzz >>
+          steps:
+            - run:
+                name: Fuzz the parser
+                command: cmake --build --preset << parameters.fuzz >> --target fuzz
+      - save-vcpkg-cache:
+          id: << parameters.cache-id >>
+      - keep-logs
+
+  windows:
+    parameters:
+      msvc:
+        description: The MSVC toolset, such as 14.44; without it, the newest installed.
+        type: string
+        default: ""
+      presets:
+        type: string
+    machine: true
+    resource_class: takumu-dev/windows
+    environment:
+      VCPKG_ROOT: C:\ci\vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: C:\ci\vcpkg-cache
+      # The tests' dependencies are built by the job's toolset; see triplets/x64-windows-static-md.
+      # vcpkg's ABI hash covers the compiler, so jobs with different toolsets share the cache.
+      VCPKG_KEEP_ENV_VARS: VCToolsVersion
+    # Each step runs in Windows PowerShell, which hands its script to PowerShell 7 and passes on how
+    # it exited.
+    steps:
+      - checkout
+      - run:
+          name: Set up vcpkg at the manifest's baseline
+          command: pwsh -NoProfile -File ci/windows/setup-vcpkg.ps1; exit $LASTEXITCODE
+      - run:
+          name: Configure, build and test
+          command: >-
+            pwsh -NoProfile -File ci/windows/build.ps1
+            -MsvcVersion '<< parameters.msvc >>' -Presets '<< parameters.presets >>';
+            exit $LASTEXITCODE
+      - run:
+          name: Gather the logs of a failed job
+          when: on_fail
+          command: pwsh -NoProfile -File ci/windows/gather-logs.ps1 logs; exit $LASTEXITCODE
+      - store_artifacts:
+          path: logs
+
+  macos:
+    macos:
+      xcode: 26.4.1
+    resource_class: m4pro.medium
+    environment:
+      # The oldest Xcode whose libc++ reads floating-point numbers with std::from_chars.
+      XCODE_VERSION: "26.4"
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      VCPKG_ROOT: /tmp/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: /tmp/vcpkg-cache
+    steps:
+      - checkout
+      - run:
+          name: Check that the job builds with Xcode 26.4
+          command: |
+            xcodebuild -version
+            /usr/bin/clang++ --version
+            version=$(xcodebuild -version | sed -n 's/^Xcode //p')
+            case $version in
+              "$XCODE_VERSION" | "$XCODE_VERSION".*) ;;
+              *) echo "The job builds with Xcode $version, not $XCODE_VERSION" >&2; exit 1 ;;
+            esac
+      # The image has neither.
+      - run:
+          name: Install CMake and Ninja
+          command: brew install cmake ninja
+      - run:
+          name: Set up vcpkg at the manifest's baseline
+          command: ci/setup-vcpkg.sh
+      - restore-vcpkg-cache:
+          id: xcode-26.4-arm64
+      - run:
+          name: Configure, build and test
+          command: |
+            cmake --workflow --preset apple-clang-release
+            cmake --workflow --preset apple-clang-noexcept
+      - save-vcpkg-cache:
+          id: xcode-26.4-arm64
+          path: /tmp/vcpkg-cache
+      - keep-logs
+
+  lint:
+    executor:
+      name: linux
+      image: ubuntu:26.04
+    steps:
+      - checkout
+      # With libFuzzer's runtime, clang-tidy reads the fuzzer too.
+      - run:
+          name: Install the build tools
+          command: |
+            LLVM_VERSION=23 ci/linux/install-tools.sh \
+              g++ clang-format-23 clang-tidy-23 libclang-rt-23-dev
+      - run:
+          name: Check the formatting
+          command: cmake --workflow --preset format
+      # clang-tidy reads the tests too, which need Catch2.
+      - run:
+          name: Set up vcpkg at the manifest's baseline
+          command: ci/setup-vcpkg.sh
+      # The same ports, built by the same compiler, as the Clang 23 jobs with libstdc++.
+      - restore-vcpkg-cache:
+          id: clang-23
+      - run:
+          name: Run clang-tidy
+          command: cmake --workflow --preset tidy
+
+  docs:
+    executor:
+      name: linux
+      image: ubuntu:26.04
+    steps:
+      - checkout
+      - run:
+          name: Install the build tools
+          command: ci/linux/install-tools.sh g++ doxygen
+      - run:
+          name: Check that every public declaration is documented
+          command: cmake --workflow --preset docs
+
+  # A project that installs pedantjson itself and builds against it, with no vcpkg anywhere.
+  consumer-installed:
+    executor:
+      name: linux
+      image: gcc:16
+    steps:
+      - checkout
+      - run:
+          name: Install the build tools
+          command: ci/linux/install-tools.sh
+      - run:
+          name: Build the library and install it
+          command: cmake --workflow --preset library
+      - run:
+          name: Build and run a project that finds it with find_package
+          command: |
+            cmake -S tests/consumers/installed -B build/installed -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/build/library/prefix"
+            cmake --build build/installed
+            build/installed/consumer
+      - run:
+          name: Build and run a project that finds it with pkg-config
+          command: |
+            cmake -S tests/consumers/pkg-config -B build/pkg-config -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/build/library/prefix"
+            cmake --build build/pkg-config
+            build/pkg-config/consumer
+
+  # The same project, given pedantjson by vcpkg through the port in ports/: once as the port stands,
+  # downloading the release it names as it will from vcpkg's registry, and once with its portfile
+  # run on this checkout, so that each change is built through the port before it is released.
+  consumer-vcpkg:
+    executor:
+      name: linux
+      image: gcc:16
+    steps:
+      - checkout
+      - run:
+          name: Install the build tools
+          command: ci/linux/install-tools.sh
+      - run:
+          name: Set up vcpkg at the manifest's baseline
+          command: ci/setup-vcpkg.sh
+      - run:
+          name: Build and run a project that gets the port's release from vcpkg
+          command: |
+            cmake -S tests/consumers/installed -B build/vcpkg -G Ninja -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+              -DVCPKG_OVERLAY_PORTS="$PWD/ports"
+            cmake --build build/vcpkg
+            build/vcpkg/consumer
+      # A build of the checkout looks the same to vcpkg's binary caching as a build of any other, so
+      # nothing is cached or restored.
+      - run:
+          name: Build and run a project that gets this checkout from vcpkg, through the portfile
+          environment:
+            VCPKG_BINARY_SOURCES: clear
+          command: |
+            cmake -S tests/consumers/installed -B build/vcpkg-checkout -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+              -DVCPKG_OVERLAY_PORTS="$PWD/ci/checkout-port"
+            cmake --build build/vcpkg-checkout
+            build/vcpkg-checkout/consumer
+      - keep-logs
+
+  ci:
+    docker:
+      - image: ubuntu:26.04
+    resource_class: small
+    steps:
+      - run:
+          name: Every other job passed
+          command: "true"
+
+workflows:
+  ci:
+    jobs:
+      # The oldest compilers pedantjson supports, in release. Debian 12 carries the oldest libstdc++
+      # with std::expected, GCC 12's, and Clang 19 is the first to define the __cpp_concepts it asks
+      # for. Clang 20's libc++ is the first that reads floating-point numbers with std::from_chars.
+      - linux:
+          name: gcc-12-release
+          image: gcc:12
+          cache-id: gcc-12
+          presets: gcc-release
+      - linux:
+          name: clang-19-release
+          image: debian:bookworm
+          llvm: "19"
+          packages: g++
+          cache-id: clang-19
+          presets: clang-release
+      - linux:
+          name: libcxx-20-release
+          image: ubuntu:24.04
+          llvm: "20"
+          packages: g++ libc++-20-dev libc++abi-20-dev
+          cache-id: libcxx-20
+          presets: libcxx-release
+
+      # The newest releases, in debug with AddressSanitizer and UndefinedBehaviorSanitizer, and in
+      # release.
+      - linux:
+          name: gcc-16-sanitize
+          image: gcc:16
+          cache-id: gcc-16
+          presets: gcc-sanitize
+      - linux:
+          name: gcc-16-release
+          image: gcc:16
+          cache-id: gcc-16
+          presets: gcc-release gcc-noexcept
+      - linux:
+          name: gcc-16-arm-release
+          image: gcc:16
+          resource-class: arm.medium
+          cache-id: gcc-16-arm
+          presets: gcc-release
+      - linux:
+          name: clang-23-sanitize
+          image: ubuntu:26.04
+          llvm: "23"
+          packages: g++ libclang-rt-23-dev
+          cache-id: clang-23
+          presets: clang-sanitize
+          fuzz: clang-sanitize
+      - linux:
+          name: clang-23-release
+          image: ubuntu:26.04
+          llvm: "23"
+          packages: g++
+          cache-id: clang-23
+          presets: clang-release
+      - linux:
+          name: libcxx-23-sanitize
+          image: ubuntu:26.04
+          llvm: "23"
+          packages: g++ libc++-23-dev libc++abi-23-dev libclang-rt-23-dev
+          cache-id: libcxx-23
+          presets: libcxx-sanitize
+      - linux:
+          name: libcxx-23-release
+          image: ubuntu:26.04
+          llvm: "23"
+          packages: g++ libc++-23-dev libc++abi-23-dev
+          cache-id: libcxx-23
+          presets: libcxx-release
+
+      # The oldest toolset pedantjson supports, and the newest the machine carries. Until MSVC
+      # 14.52, C++23 is the preview standard mode, which CMake chooses. MSVC's AddressSanitizer
+      # needs Catch2 instrumented, which vcpkg builds for release alone, so the ASan job builds
+      # optimised against the release CRT, with assertions kept on.
+      - windows:
+          name: msvc-14-44-release
+          msvc: "14.44"
+          presets: msvc-release
+      - windows:
+          name: msvc-latest-asan
+          presets: msvc-asan
+      - windows:
+          name: msvc-latest-release
+          presets: msvc-release msvc-noexcept
+
+      - macos
+      - lint
+      - docs
+      - consumer-installed
+      - consumer-vcpkg
+
+      - ci:
+          requires:
+            - gcc-12-release
+            - clang-19-release
+            - libcxx-20-release
+            - gcc-16-sanitize
+            - gcc-16-release
+            - gcc-16-arm-release
+            - clang-23-sanitize
+            - clang-23-release
+            - libcxx-23-sanitize
+            - libcxx-23-release
+            - msvc-14-44-release
+            - msvc-latest-asan
+            - msvc-latest-release
+            - macos
+            - lint
+            - docs
+            - consumer-installed
+            - consumer-vcpkg

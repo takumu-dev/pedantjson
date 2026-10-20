@@ -1,7 +1,6 @@
-# Sets up the job's later steps as a developer command prompt for MSVC would be: runs vcvarsall.bat
-# for x64, at the toolset named or else at the newest the image carries, and writes the variables it
-# sets or changes to GITHUB_ENV, all but VCPKG_ROOT. The toolset's full version goes to the step's
-# outputs as `toolset`.
+# Sets up the process it runs in as a developer command prompt for MSVC would be: runs vcvarsall.bat
+# for x64, at the toolset named or else at the newest the machine carries, and sets the variables it
+# sets or changes, all but VCPKG_ROOT, for the rest of the process.
 param(
     # The MSVC toolset to set up, such as 14.44. Without it, the newest installed.
     [ValidatePattern('^14\.\d{2}$')]
@@ -44,7 +43,7 @@ foreach ($line in $lines) {
     # The names of environment variables don't depend on case on Windows, and neither does
     # this table's lookup.
     if (-not $before.ContainsKey($name) -or $before[$name] -cne $value) {
-        Add-Content -Path $env:GITHUB_ENV -Value "$name=$value"
+        Set-Item -Path "env:$name" -Value $value
     }
 }
 if (-not $toolset) {
@@ -53,5 +52,4 @@ if (-not $toolset) {
 if ($Version -and $toolset -notlike "$Version.*") {
     throw "enter-msvc: vcvarsall.bat set up MSVC $toolset, not $Version"
 }
-Add-Content -Path $env:GITHUB_OUTPUT -Value "toolset=$toolset"
 Write-Output "enter-msvc: MSVC $toolset, from $vs"
