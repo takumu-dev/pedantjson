@@ -138,7 +138,7 @@ pedantjson's outcome and the reason for it.
 
 - A C++23 compiler and standard library with `std::expected`, and with `std::from_chars` for
   floating-point numbers. pedantjson supports these, each from the oldest version CI builds and
-  tests it with on GitHub's runners, through to the newest release, which CI builds too:
+  tests it with, through to the newest release, which CI builds too:
 
   | Compiler | Oldest version |
   |---|---|
@@ -148,7 +148,7 @@ pedantjson's outcome and the reason for it.
   | MSVC | 14.44, from Visual Studio 2022 17.14 |
   | Apple Clang | from Xcode 26.4 |
 
-  An oldest version rises only when no runner carries it any more, and a release that raises one
+  An oldest version rises only when CI can't build with it any more, and a release that raises one
   is a breaking change. Until MSVC 14.52, CMake builds C++23 with MSVC in its preview standard
   mode.
 - CMake 3.28 or newer.
@@ -247,7 +247,7 @@ own, as `CODING_STANDARDS.md` describes.
 - `ports/pedantjson/` is the vcpkg port, which downloads and builds the release it names. CI
   builds the same program through it, and through its portfile run on the checkout by
   `ci/checkout-port/`, so that each change is built with vcpkg before it is released.
-- `.github/workflows/ci.yml` builds and tests every pull request with each compiler above, at its
+- `.circleci/config.yml` builds and tests every pull request with each compiler above, at its
   oldest version and its newest release, and fuzzes the parser for a minute.
 
 ## Acknowledgements
