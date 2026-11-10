@@ -11,9 +11,17 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-$vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-if (-not $vs) {
+# Newest first. A toolset belongs to one of them, so the toolset named chooses which.
+$installs = @(& $vswhere -all -sort -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+if (-not $installs) {
     throw 'enter-msvc: no Visual Studio with the C++ tools is installed'
+}
+$vs = $installs[0]
+if ($Version) {
+    $vs = $installs | Where-Object { Test-Path (Join-Path $_ "VC\Tools\MSVC\$Version.*") } | Select-Object -First 1
+    if (-not $vs) {
+        throw "enter-msvc: no Visual Studio carries MSVC $Version; looked in $($installs -join ', ')"
+    }
 }
 $vcvarsall = Join-Path $vs 'VC\Auxiliary\Build\vcvarsall.bat'
 $arguments = if ($Version) { "x64 -vcvars_ver=$Version" } else { 'x64' }

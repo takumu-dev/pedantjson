@@ -5,9 +5,12 @@
 #
 # The Linux jobs run in stock images on CircleCI's Docker executor: GCC's official ones, and
 # Debian's and Ubuntu's with Clang from apt.llvm.org, which ci/linux/install-tools.sh sets up. The
-# macOS job runs on CircleCI's Xcode image. The Windows jobs run on a self-hosted runner, a machine
-# that keeps each MSVC toolset they build with installed, and vcpkg's clone and binary cache
-# between jobs. A newest release is a version named in this file, so a new major means editing it.
+# macOS job runs on CircleCI's Xcode image, and one Windows job on its Windows Server image, at a
+# dated tag so that the MSVC toolsets it carries hold still. A newest release is a version named in
+# this file, so a new major means editing it.
+#
+# The Windows and macOS jobs cost far more to run than the Linux ones, so they run on pull requests
+# and don't repeat when a branch that passed them merges into main or develop.
 #
 # The Clang job with the sanitizers and libstdc++ also fuzzes the parser for a minute. A text that
 # crashes the fuzzer is kept with the logs of the failed job.
@@ -50,8 +53,9 @@ commands:
             - vcpkg-<< parameters.id >>-{{ checksum "/tmp/vcpkg-inputs" }}
             - vcpkg-<< parameters.id >>-
 
-  # Only pushes to develop save a cache, which pull requests then restore. A key is saved once, and
-  # a failed job saves nothing, or a cache missing ports would stand until the key changed.
+  # Only pushes to develop save a cache, which pull requests then restore, unless the job never runs
+  # on develop. A key is saved once, and a failed job saves nothing, or a cache missing ports would
+  # stand until the key changed.
   save-vcpkg-cache:
     parameters:
       id:
@@ -59,10 +63,15 @@ commands:
       path:
         type: string
         default: /opt/vcpkg-cache
+      any-branch:
+        type: boolean
+        default: false
     steps:
       - when:
           condition:
-            equal: [develop, << pipeline.git.branch >>]
+            or:
+              - << parameters.any-branch >>
+              - equal: [develop, << pipeline.git.branch >>]
           steps:
             - save_cache:
                 name: Save the vcpkg binary cache
@@ -79,6 +88,34 @@ commands:
           command: ci/gather-logs.sh logs
       - store_artifacts:
           path: logs
+
+  # Builds and tests presets at one toolset. It runs even after an earlier build has failed, so one
+  # job reports every build that fails, and keeps each build's logs apart, because two of them use
+  # the same build tree.
+  windows-build:
+    parameters:
+      id:
+        type: string
+      msvc:
+        description: The MSVC toolset, such as 14.44, or latest for the newest installed.
+        type: string
+        default: latest
+      presets:
+        type: string
+    steps:
+      - run:
+          name: Build and test << parameters.id >>
+          when: always
+          command: >-
+            pwsh -NoProfile -File ci/windows/build.ps1
+            -MsvcVersion '<< parameters.msvc >>' -Presets '<< parameters.presets >>';
+            exit $LASTEXITCODE
+      - run:
+          name: Gather the logs of a failed build
+          when: on_fail
+          command: >-
+            pwsh -NoProfile -File ci/windows/gather-logs.ps1 logs/<< parameters.id >>;
+            exit $LASTEXITCODE
 
 jobs:
   linux:
@@ -135,38 +172,62 @@ jobs:
       - keep-logs
 
   windows:
-    parameters:
-      msvc:
-        description: The MSVC toolset, such as 14.44; without it, the newest installed.
-        type: string
-        default: ""
-      presets:
-        type: string
-    machine: true
-    resource_class: takumu-dev/windows
+    machine:
+      image: windows-server-2025-gui:2026.10.1
+      shell: powershell.exe -ExecutionPolicy Bypass
+    resource_class: windows.medium
     environment:
+      CI_TOOLS: C:\ci\tools
       VCPKG_ROOT: C:\ci\vcpkg
       VCPKG_DEFAULT_BINARY_CACHE: C:\ci\vcpkg-cache
       # The tests' dependencies are built by the job's toolset; see triplets/x64-windows-static-md.
-      # vcpkg's ABI hash covers the compiler, so jobs with different toolsets share the cache.
+      # vcpkg's ABI hash covers the compiler, so builds with different toolsets share the cache.
       VCPKG_KEEP_ENV_VARS: VCToolsVersion
     # Each step runs in Windows PowerShell, which hands its script to PowerShell 7 and passes on how
     # it exited.
     steps:
       - checkout
       - run:
+          name: Install CMake and Ninja
+          command: >-
+            pwsh -NoProfile -File ci/windows/install-tools.ps1 -CMake 4.4.4 -Ninja 1.13.2;
+            exit $LASTEXITCODE
+      - run:
           name: Set up vcpkg at the manifest's baseline
           command: pwsh -NoProfile -File ci/windows/setup-vcpkg.ps1; exit $LASTEXITCODE
       - run:
-          name: Configure, build and test
-          command: >-
-            pwsh -NoProfile -File ci/windows/build.ps1
-            -MsvcVersion '<< parameters.msvc >>' -Presets '<< parameters.presets >>';
-            exit $LASTEXITCODE
-      - run:
-          name: Gather the logs of a failed job
-          when: on_fail
-          command: pwsh -NoProfile -File ci/windows/gather-logs.ps1 logs; exit $LASTEXITCODE
+          name: Hash what vcpkg builds the ports from
+          command: |
+            Get-ChildItem -Recurse -File triplets | Sort-Object FullName |
+              ForEach-Object { Get-Content $_.FullName } |
+              Set-Content C:\ci\vcpkg-inputs
+            Get-Content vcpkg.json, vcpkg-configuration.json |
+              Add-Content C:\ci\vcpkg-inputs
+      - restore_cache:
+          name: Restore the vcpkg binary cache
+          keys:
+            - vcpkg-windows-{{ checksum "C:/ci/vcpkg-inputs" }}
+            - vcpkg-windows-
+      # The oldest toolset pedantjson supports, and the newest the image carries. Until MSVC 14.52,
+      # C++23 is the preview standard mode, which CMake chooses. MSVC's AddressSanitizer needs
+      # Catch2 instrumented, which vcpkg builds for release alone, so the ASan build is optimised
+      # against the release CRT, with assertions kept on.
+      - windows-build:
+          id: msvc-14-44-release
+          msvc: "14.44"
+          presets: msvc-release
+      - windows-build:
+          id: msvc-latest-asan
+          presets: msvc-asan
+      - windows-build:
+          id: msvc-latest-release
+          presets: msvc-release msvc-noexcept
+      # The job never runs on develop, so it saves from any branch once every build has passed.
+      - save_cache:
+          name: Save the vcpkg binary cache
+          key: vcpkg-windows-{{ checksum "C:/ci/vcpkg-inputs" }}
+          paths:
+            - C:\ci\vcpkg-cache
       - store_artifacts:
           path: logs
 
@@ -209,6 +270,7 @@ jobs:
       - save-vcpkg-cache:
           id: xcode-26.4-arm64
           path: /tmp/vcpkg-cache
+          any-branch: true
       - keep-logs
 
   lint:
@@ -326,24 +388,29 @@ jobs:
           command: "true"
 
 workflows:
-  ci:
+  pull-request:
+    when:
+      not: &merged
+        or:
+          - equal: [main, << pipeline.git.branch >>]
+          - equal: [develop, << pipeline.git.branch >>]
     jobs:
       # The oldest compilers pedantjson supports, in release. Debian 12 carries the oldest libstdc++
       # with std::expected, GCC 12's, and Clang 19 is the first to define the __cpp_concepts it asks
       # for. Clang 20's libc++ is the first that reads floating-point numbers with std::from_chars.
-      - linux:
+      - linux: &gcc-12-release
           name: gcc-12-release
           image: gcc:12
           cache-id: gcc-12
           presets: gcc-release
-      - linux:
+      - linux: &clang-19-release
           name: clang-19-release
           image: debian:bookworm
           llvm: "19"
           packages: g++
           cache-id: clang-19
           presets: clang-release
-      - linux:
+      - linux: &libcxx-20-release
           name: libcxx-20-release
           image: ubuntu:24.04
           llvm: "20"
@@ -353,23 +420,23 @@ workflows:
 
       # The newest releases, in debug with AddressSanitizer and UndefinedBehaviorSanitizer, and in
       # release.
-      - linux:
+      - linux: &gcc-16-sanitize
           name: gcc-16-sanitize
           image: gcc:16
           cache-id: gcc-16
           presets: gcc-sanitize
-      - linux:
+      - linux: &gcc-16-release
           name: gcc-16-release
           image: gcc:16
           cache-id: gcc-16
           presets: gcc-release gcc-noexcept
-      - linux:
+      - linux: &gcc-16-arm-release
           name: gcc-16-arm-release
           image: gcc:16
           resource-class: arm.medium
           cache-id: gcc-16-arm
           presets: gcc-release
-      - linux:
+      - linux: &clang-23-sanitize
           name: clang-23-sanitize
           image: ubuntu:26.04
           llvm: "23"
@@ -377,21 +444,21 @@ workflows:
           cache-id: clang-23
           presets: clang-sanitize
           fuzz: clang-sanitize
-      - linux:
+      - linux: &clang-23-release
           name: clang-23-release
           image: ubuntu:26.04
           llvm: "23"
           packages: g++
           cache-id: clang-23
           presets: clang-release
-      - linux:
+      - linux: &libcxx-23-sanitize
           name: libcxx-23-sanitize
           image: ubuntu:26.04
           llvm: "23"
           packages: g++ libc++-23-dev libc++abi-23-dev libclang-rt-23-dev
           cache-id: libcxx-23
           presets: libcxx-sanitize
-      - linux:
+      - linux: &libcxx-23-release
           name: libcxx-23-release
           image: ubuntu:26.04
           llvm: "23"
@@ -399,21 +466,7 @@ workflows:
           cache-id: libcxx-23
           presets: libcxx-release
 
-      # The oldest toolset pedantjson supports, and the newest the machine carries. Until MSVC
-      # 14.52, C++23 is the preview standard mode, which CMake chooses. MSVC's AddressSanitizer
-      # needs Catch2 instrumented, which vcpkg builds for release alone, so the ASan job builds
-      # optimised against the release CRT, with assertions kept on.
-      - windows:
-          name: msvc-14-44-release
-          msvc: "14.44"
-          presets: msvc-release
-      - windows:
-          name: msvc-latest-asan
-          presets: msvc-asan
-      - windows:
-          name: msvc-latest-release
-          presets: msvc-release msvc-noexcept
-
+      - windows
       - macos
       - lint
       - docs
@@ -432,10 +485,42 @@ workflows:
             - clang-23-release
             - libcxx-23-sanitize
             - libcxx-23-release
-            - msvc-14-44-release
-            - msvc-latest-asan
-            - msvc-latest-release
+            - windows
             - macos
+            - lint
+            - docs
+            - consumer-installed
+            - consumer-vcpkg
+
+  merged:
+    when: *merged
+    jobs:
+      - linux: *gcc-12-release
+      - linux: *clang-19-release
+      - linux: *libcxx-20-release
+      - linux: *gcc-16-sanitize
+      - linux: *gcc-16-release
+      - linux: *gcc-16-arm-release
+      - linux: *clang-23-sanitize
+      - linux: *clang-23-release
+      - linux: *libcxx-23-sanitize
+      - linux: *libcxx-23-release
+      - lint
+      - docs
+      - consumer-installed
+      - consumer-vcpkg
+      - ci:
+          requires:
+            - gcc-12-release
+            - clang-19-release
+            - libcxx-20-release
+            - gcc-16-sanitize
+            - gcc-16-release
+            - gcc-16-arm-release
+            - clang-23-sanitize
+            - clang-23-release
+            - libcxx-23-sanitize
+            - libcxx-23-release
             - lint
             - docs
             - consumer-installed
