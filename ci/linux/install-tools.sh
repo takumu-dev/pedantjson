@@ -53,8 +53,9 @@ Pin-Priority: 1001
 EOF
     apt-get update
     set -- "clang-$LLVM_VERSION" "$@"
-    if [ -n "${GITHUB_PATH:-}" ]; then
-        echo "/usr/lib/llvm-$LLVM_VERSION/bin" >> "$GITHUB_PATH"
+    # CircleCI sources BASH_ENV at the start of each later step.
+    if [ -n "${BASH_ENV:-}" ]; then
+        echo "export PATH=\"/usr/lib/llvm-$LLVM_VERSION/bin:\$PATH\"" >> "$BASH_ENV"
     fi
 fi
 

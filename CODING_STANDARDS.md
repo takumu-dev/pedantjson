@@ -13,8 +13,7 @@ departs from them, it says so.
   rather than in every translation unit that reads JSON.
 - The README lists the compilers CI proves, each at the oldest version CI builds it with. Code stays
   within those floors: a feature the oldest supported compiler lacks waits until the floor rises. A
-  floor rises only when no runner CI uses carries it any more, and raising one is a breaking
-  change.
+  floor rises only when CI can't build with it any more, and raising one is a breaking change.
 - CMake 3.28 or newer, which Ubuntu 24.04 and Visual Studio 2022 carry. Every configuration the
   project builds is a preset in `CMakePresets.json`, with a workflow preset, so that a developer
   and CI build alike.
@@ -140,12 +139,19 @@ departs from them, it says so.
 - `tests/consumers/` builds a small program against the installed package, through pkg-config, and
   against the source tree as a subproject. Each run starts from an empty prefix and empty build
   trees, so that nothing an earlier run left can stand in for what this one should make.
+- A package manager may build the library with another compiler than the program's, so the
+  library that one of GCC and Clang builds must link into a program the other builds. Nothing it
+  defines for a program to call is a constrained template, since the two mangle a constraint into
+  an instantiation's name differently, and a consumer test builds the program with the other
+  compiler wherever one is found.
 
 ## Versions, commits and branches
 
 - Versions follow [semantic versioning](https://semver.org). Before 1.0, a minor release may break
-  the interface. The version lives in `project(pedantjson VERSION x.y.z)`, and in the vcpkg port's
-  manifest, which vcpkg needs and a test keeps in step with it.
+  the interface. The version lives in `project(pedantjson VERSION x.y.z)`, and `RELEASING.md` says
+  how a release raises it. The vcpkg port's manifest names the release the port downloads, so the
+  port follows the version only once that release is tagged, and a test keeps it at most one
+  release behind.
 - A change that a project using pedantjson would notice adds a line to the `Unreleased` section of
   `CHANGELOG.md`, in the branch that makes it, under the heading Keep a Changelog gives its kind:
   `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed` or `Security`. A release dates that section

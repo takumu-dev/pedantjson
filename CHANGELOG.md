@@ -7,6 +7,20 @@ the form of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions f
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-11
+
+### Fixed
+
+- `Number::to<T>()` links into a program that GCC builds against a library that Clang built, and
+  the other way round. The library no longer defines a constrained template for a program to call,
+  whose name the two compilers mangle differently.
+
+### Changed
+
+- The vcpkg port in `ports/pedantjson/` downloads and builds the release it names, rather than the
+  source tree it sits in, so that a project can take it as an overlay port until pedantjson is in
+  vcpkg's registry.
+
 ## [0.1.0] - 2026-10-19
 
 ### Added
@@ -35,5 +49,6 @@ the form of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions f
   library builds with exceptions enabled or disabled, with GCC 12, Clang 19 with libstdc++,
   Clang 20 with libc++, MSVC 14.44, Apple Clang from Xcode 26.4, and newer.
 
-[Unreleased]: https://github.com/takumu-dev/pedantjson/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/takumu-dev/pedantjson/compare/0.1.1...HEAD
+[0.1.1]: https://github.com/takumu-dev/pedantjson/releases/tag/0.1.1
 [0.1.0]: https://github.com/takumu-dev/pedantjson/releases/tag/0.1.0
