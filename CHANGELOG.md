@@ -7,6 +7,12 @@ the form of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions f
 
 ## [Unreleased]
 
+### Fixed
+
+- `Number::to<T>()` links into a program that GCC builds against a library that Clang built, and
+  the other way round. The library no longer defines a constrained template for a program to call,
+  whose name the two compilers mangle differently.
+
 ### Changed
 
 - The vcpkg port in `ports/pedantjson/` downloads and builds the release it names, rather than the
