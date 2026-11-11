@@ -13,8 +13,7 @@ departs from them, it says so.
   rather than in every translation unit that reads JSON.
 - The README lists the compilers CI proves, each at the oldest version CI builds it with. Code stays
   within those floors: a feature the oldest supported compiler lacks waits until the floor rises. A
-  floor rises only when no runner CI uses carries it any more, and raising one is a breaking
-  change.
+  floor rises only when CI can't build with it any more, and raising one is a breaking change.
 - CMake 3.28 or newer, which Ubuntu 24.04 and Visual Studio 2022 carry. Every configuration the
   project builds is a preset in `CMakePresets.json`, with a workflow preset, so that a developer
   and CI build alike.
