@@ -4,11 +4,13 @@
 
 #include <pedantjson/pedantjson.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <optional>
 #include <source_location>
 #include <span>
 #include <string>
@@ -47,32 +49,15 @@ bool has_at(std::string_view text, std::size_t offset, std::string_view word) {
     return text.substr(offset).starts_with(word);
 }
 
-/// A string written as a JSON string with the fewest escapes: a quotation mark, a backslash and
-/// the characters below U+0020, which JSON won't take unescaped.
-std::string quoted(std::string_view string) {
-    constexpr std::string_view hex = "0123456789abcdef";
-    std::string text = "\"";
-    for (const char character : string) {
-        const auto byte = static_cast<unsigned char>(character);
-        if (character == '"' || character == '\\') {
-            text += '\\';
-            text += character;
-        } else if (byte < 0x20) {
-            text += "\\u00";
-            text += hex.at(byte / 16);
-            text += hex.at(byte % 16);
-        } else {
-            text += character;
-        }
-    }
-    return text + '"';
-}
-
 /// Checks that a decoded string reads back as itself, written as a JSON string.
 void check_string(std::string_view string) {
-    const auto reread = pedantjson::parse(quoted(string));
+    const auto written = pedantjson::write(pedantjson::Draft{string});
+    if (!written) {
+        broken("a decoded string is UTF-8, which a draft writes");
+    }
+    const auto reread = pedantjson::parse(*written);
     if (!reread) {
-        broken("a decoded string is UTF-8, which JSON takes back");
+        broken("a written string is JSON");
     }
     check(reread->root().as_string() == string, "a decoded string reads back as itself");
 }
@@ -287,6 +272,50 @@ class Walk {
     Position last_position_{.line = 0, .column = 0};
 };
 
+/// Whether two values are the same tree: the same kinds, the same number texts and strings, and
+/// the same elements and members in the same order, duplicates included.
+// NOLINTNEXTLINE(misc-no-recursion): max_depth bounds the depth, which is what it is for
+bool same_tree(const Value& value, const Value& other) {
+    if (value.kind() != other.kind() || value.as_bool() != other.as_bool() ||
+        value.as_string() != other.as_string()) {
+        return false;
+    }
+    if (const auto number = value.as_number()) {
+        const auto other_number = other.as_number();
+        return other_number && number->text() == other_number->text();
+    }
+    if (const auto array = value.as_array()) {
+        const auto other_array = other.as_array();
+        return other_array && std::ranges::equal(*array, *other_array, same_tree);
+    }
+    if (const auto object = value.as_object()) {
+        const auto other_object = other.as_object();
+        // NOLINTNEXTLINE(misc-no-recursion): as same_tree itself
+        const auto same_member = [](const pedantjson::Member& member,
+                                    const pedantjson::Member& other_member) {
+            return member.key.name() == other_member.key.name() &&
+                   same_tree(member.value, other_member.value);
+        };
+        return other_object && std::ranges::equal(*object, *other_object, same_member);
+    }
+    return true;
+}
+
+/// Checks that a value is written, compact and indented, as text that reads back as the same
+/// tree, and that a draft of it is written alike.
+void check_written(const Value& value) {
+    for (const std::optional<unsigned> indent : {std::optional<unsigned>{}, std::optional{2U}}) {
+        const std::string written = pedantjson::write(value, {.indent = indent});
+        const auto reread = pedantjson::parse(written);
+        if (!reread) {
+            broken("a written value is JSON");
+        }
+        check(same_tree(value, reread->root()), "a written value reads back as the same tree");
+        const auto drafted = pedantjson::write(pedantjson::Draft{value}, {.indent = indent});
+        check(drafted && *drafted == written, "a draft of a value is written as the value is");
+    }
+}
+
 /// Checks what `parse` makes of a text.
 void check_text(const std::string& text) {
     auto document = pedantjson::parse(text);
@@ -315,6 +344,7 @@ void check_text(const std::string& text) {
     const Value root = document->root();
     const Document moved = std::move(*document);
     Walk{moved, text}.visit(root, Pointer{}, /*first=*/true);
+    check_written(root);
 }
 
 /// Checks what `Pointer::parse` makes of a text.

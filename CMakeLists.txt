@@ -35,10 +35,13 @@ function(pedantjson_add_library target)
     target_sources(${target}
         PRIVATE
             "${dir}/src/document.cpp"
+            "${dir}/src/draft.cpp"
             "${dir}/src/number.cpp"
             "${dir}/src/parse.cpp"
             "${dir}/src/pointer.cpp"
             "${dir}/src/storage.hpp"
+            "${dir}/src/utf8.hpp"
+            "${dir}/src/write.cpp"
         PUBLIC
             FILE_SET HEADERS
             BASE_DIRS "${dir}/include"

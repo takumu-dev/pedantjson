@@ -1,11 +1,14 @@
 /// \file
-/// pedantjson, a strict JSON reader.
+/// pedantjson, a strict JSON reader, with a writer whose output it reads back.
 ///
 /// `parse` reads a JSON text into a `Document`, an immutable tree that owns the text it was read
 /// from. Every key and every value carries the byte offset where it begins in that text, an
 /// object's members stay in the order the text gives them, duplicates included, and a number keeps
 /// the text it was written as. A text that isn't JSON gives a `SyntaxError` instead, which says
 /// what is wrong and where.
+///
+/// `write` writes a value of a document, or a `Draft`, a value built in memory, as compact or
+/// indented text that `parse` reads back as the same values.
 
 #pragma once
 
@@ -18,6 +21,9 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace pedantjson {
 
@@ -30,6 +36,9 @@ namespace detail {
 
 /// A document's text and its nodes, shared by every handle into the document.
 struct Storage;
+
+/// Lets the writer walk a draft's arrays and objects, which a draft keeps to itself.
+struct DraftTree;
 
 /// Whether `T` is one of `Types`.
 template <typename T, typename... Types>
@@ -691,5 +700,285 @@ class Document {
 /// \return The document, or the first mistake that makes the text something other than JSON.
 [[nodiscard]] std::expected<Document, SyntaxError> parse(std::string text,
                                                          ParseOptions options = {});
+
+/// How `write` lays out the text it writes.
+struct WriteOptions {
+    /// How many spaces each level of nesting is indented by, which must not be 0. Empty, the
+    /// default, writes compact text with no whitespace at all.
+    ///
+    /// An indented text has one element or member to a line, `"name": value` with a space after
+    /// the colon, and each closing bracket on a line of its own at its parent's indent. An empty
+    /// array or object is written `[]` or `{}`. Either way, the text ends at the value's last
+    /// character.
+    std::optional<unsigned> indent;
+};
+
+/// A JSON value built in memory to be written, with no text and no offsets.
+///
+/// A draft is made from null, a boolean, a number or a string, or as an empty array or object
+/// that elements and members are then appended to, or copied from a value of a document. It is an
+/// ordinary value: copying it copies everything inside it. It has nothing to read back with; a
+/// caller that wants to look inside one writes it and parses the text.
+///
+/// A draft holds whatever it is given. What JSON can't hold, a number that isn't finite or a
+/// string that isn't UTF-8, is refused when the draft is written.
+class Draft {
+  public:
+    // A draft converts implicitly from null, a boolean, a number or a string, so that `append`
+    // takes them as they are.
+
+    /// Creates `null`.
+    Draft() noexcept = default;
+
+    /// Creates `null`.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(std::nullptr_t /*null*/) noexcept {}
+
+    /// Creates `true` or `false`.
+    ///
+    /// \param value The value.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(bool value) noexcept : kind_(Kind::boolean), is_true_(value) {}
+
+    /// Creates a number, written exactly.
+    ///
+    /// \param value The number.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(signed char value);
+
+    /// Creates a number, written exactly.
+    ///
+    /// \param value The number.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(short value);
+
+    /// Creates a number, written exactly.
+    ///
+    /// \param value The number.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(int value);
+
+    /// Creates a number, written exactly.
+    ///
+    /// \param value The number.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(long value);
+
+    /// Creates a number, written exactly.
+    ///
+    /// \param value The number.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(long long value);
+
+    /// Creates a number, written exactly.
+    ///
+    /// \param value The number.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(unsigned char value);
+
+    /// Creates a number, written exactly.
+    ///
+    /// \param value The number.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(unsigned short value);
+
+    /// Creates a number, written exactly.
+    ///
+    /// \param value The number.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(unsigned int value);
+
+    /// Creates a number, written exactly.
+    ///
+    /// \param value The number.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(unsigned long value);
+
+    /// Creates a number, written exactly.
+    ///
+    /// \param value The number.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(unsigned long long value);
+
+    /// Creates a number, written in the shortest form that `Number::to<float>()` reads back as the
+    /// same bits, negative zero and subnormals included.
+    ///
+    /// \param value The number, which should be finite.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(float value);
+
+    /// Creates a number, written in the shortest form that `Number::to<double>()` reads back as the
+    /// same bits, negative zero and subnormals included.
+    ///
+    /// \param value The number, which should be finite.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(double value);
+
+    /// A character isn't a number, so no draft is made from one.
+    ///
+    /// \tparam T A character type.
+    template <typename T>
+        requires detail::OneOf<T, char, wchar_t, char8_t, char16_t, char32_t>
+    Draft(T) = delete;
+
+    /// A pointer to anything but `char` isn't a string, so no draft is made from one, rather than
+    /// the boolean it would convert to.
+    ///
+    /// \tparam T What the pointer points to.
+    template <typename T>
+        requires(!std::same_as<std::remove_cv_t<T>, char>)
+    Draft(T*) = delete;
+
+    /// Creates a string.
+    ///
+    /// \param string The string's characters, which should be UTF-8.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(std::string string) noexcept : kind_(Kind::string), characters_(std::move(string)) {}
+
+    /// Creates a string.
+    ///
+    /// \param string The string's characters, which should be UTF-8.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(std::string_view string) : Draft(std::string{string}) {}
+
+    /// Creates a string, rather than the boolean a pointer would otherwise convert to.
+    ///
+    /// \param string The string's characters, which should be UTF-8, ending at a null character.
+    ///               It must not be null.
+    // NOLINTNEXTLINE(cppcoreguidelines-explicit-constructor,misc-explicit-constructor): see above
+    Draft(const char* string) : Draft(std::string_view{string}) {}
+
+    /// Copies a value of a document and everything inside it, so that it can be written, or built
+    /// into another draft, after the document has gone.
+    ///
+    /// A number keeps the text it was read with, a string or a name is copied as it decodes, and an
+    /// object keeps its members in their order, duplicates included.
+    ///
+    /// \param value The value.
+    explicit Draft(const Value& value);
+
+    /// Copies a draft and everything inside it. The copy keeps a stack of its own rather than
+    /// recursing, so no depth of nesting can overflow the call stack.
+    ///
+    /// \param other The draft to copy.
+    Draft(const Draft& other);
+
+    /// Moves a draft, and everything inside it with it.
+    ///
+    /// \param other The draft to move from, which can then only be assigned to or destroyed.
+    Draft(Draft&& other) noexcept = default;
+
+    /// Replaces this draft with a copy of another.
+    ///
+    /// \param other The draft to copy.
+    /// \return This draft.
+    Draft& operator=(const Draft& other);
+
+    /// Replaces this draft with another.
+    ///
+    /// \param other The draft to move from.
+    /// \return This draft.
+    Draft& operator=(Draft&& other) noexcept = default;
+
+    /// Destroys the draft and everything inside it, without recursing, so that no depth of
+    /// nesting can overflow the call stack.
+    ~Draft();
+
+    /// Creates an empty array.
+    ///
+    /// \return The array.
+    [[nodiscard]] static Draft array() noexcept;
+
+    /// Creates an empty object.
+    ///
+    /// \return The object.
+    [[nodiscard]] static Draft object() noexcept;
+
+    /// Appends an element to an array. The draft must have been made as an array.
+    ///
+    /// \param element The element.
+    /// \return This draft.
+    Draft& append(Draft element);
+
+    /// Appends a member to an object, after any member of the same name. The draft must have been
+    /// made as an object.
+    ///
+    /// \param name The member's name, which should be UTF-8.
+    /// \param value The member's value.
+    /// \return This draft.
+    Draft& append(std::string name, Draft value);
+
+  private:
+    friend struct detail::DraftTree;
+
+    /// What kind of value it is.
+    Kind kind_ = Kind::null;
+
+    /// For a boolean, whether it is `true`.
+    bool is_true_ = false;
+
+    /// For a string, its characters, and for a number, its text, which is empty if the number isn't
+    /// finite.
+    std::string characters_;
+
+    /// For an object, its members' names, in order.
+    std::vector<std::string> names_;
+
+    /// For an array, its elements, and for an object, its members' values, in order.
+    std::vector<Draft> children_;
+};
+
+/// What JSON can't hold, which a draft does.
+enum class WriteErrorCode : std::uint8_t {
+    not_finite,   ///< A `float` or `double` that is infinite or not a number.
+    invalid_utf8, ///< A string or a name that isn't UTF-8.
+};
+
+/// Why a draft can't be written, and where.
+struct WriteError {
+    /// What can't be written.
+    WriteErrorCode code{};
+
+    /// The pointer to the first value that can't be written, in the order of the text it would
+    /// have been written as. A name that can't be written gives the pointer to its member, and
+    /// comes before the member's value.
+    Pointer pointer;
+
+    /// What can't be written, in words, such as `number not finite`.
+    ///
+    /// \return A fixed message for the code, in lower case with no full stop.
+    [[nodiscard]] std::string_view message() const noexcept;
+};
+
+/// Writes a value of a document as a JSON text.
+///
+/// A number is written with the text it was read with, and an object's members in their order,
+/// duplicates included. A string or a name is written from its decoded characters, escaping only a
+/// quotation mark, a backslash and the characters below U+0020, whatever the text it was read from
+/// wrote. The text never begins with a byte-order mark, even when the document's text did.
+///
+/// `parse` reads the text back as the same values, given a `ParseOptions::max_depth` at least as
+/// deep as the arrays and objects written: `write` writes any depth.
+///
+/// \param value The value, the root of its document or any value inside it.
+/// \param options How to lay out the text.
+/// \return The text.
+[[nodiscard]] std::string write(const Value& value, WriteOptions options = {});
+
+/// Writes a draft as a JSON text.
+///
+/// A `float` or a `double` is written in the shortest form that `Number::to` reads back as the
+/// same bits, and an integer exactly. Strings and names are written as the other `write` writes
+/// them. A failed write gives no text.
+///
+/// `parse` reads the text back as the same values, each number read into the type it was made
+/// from, given a `ParseOptions::max_depth` at least as deep as the arrays and objects written:
+/// `write` writes any depth.
+///
+/// \param draft The draft.
+/// \param options How to lay out the text.
+/// \return The text, or the first value in it that JSON can't hold.
+[[nodiscard]] std::expected<std::string, WriteError> write(const Draft& draft,
+                                                           WriteOptions options = {});
 
 } // namespace pedantjson

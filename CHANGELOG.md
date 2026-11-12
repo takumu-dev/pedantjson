@@ -7,6 +7,20 @@ the form of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions f
 
 ## [Unreleased]
 
+### Added
+
+- `write`, which writes any value of a document as JSON text, its numbers in the text they were
+  read with and its members in their order, duplicates included. `WriteOptions::indent` lays the
+  text out with one element or member to a line, and leaves it compact by default.
+- `Draft`, a JSON value built in memory to be written: made from null, a boolean, any number type
+  that `Number::to` reads, or a string, or as an array or object that elements and members are
+  appended to, or copied from a value of a document. Writing one returns a
+  `std::expected<std::string, WriteError>`, refusing a `float` or `double` that isn't finite and a
+  string or name that isn't UTF-8, with the pointer to the first such value. A `float` or `double`
+  is written in the shortest form that reads back as the same value, and an integer exactly.
+- Whatever `write` writes, `parse` reads back as the same values, given a `max_depth` as deep as
+  what was written.
+
 ## [0.1.1] - 2026-11-11
 
 ### Fixed

@@ -6,6 +6,7 @@ include(Catch)
 add_executable(pedantjson_tests
     array_tests.cpp
     document_tests.cpp
+    draft_tests.cpp
     encoding_tests.cpp
     json_test_suite_tests.cpp
     literal_tests.cpp
@@ -18,6 +19,7 @@ add_executable(pedantjson_tests
     position_tests.cpp
     string_value_tests.cpp
     syntax_error_tests.cpp
+    write_tests.cpp
 )
 target_link_libraries(pedantjson_tests PRIVATE pedantjson::pedantjson Catch2::Catch2WithMain)
 # JSONTestSuite's texts are read from the source tree, so that running the tests needs neither the
