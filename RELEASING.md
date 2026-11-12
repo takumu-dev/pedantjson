@@ -8,9 +8,9 @@ Below, `<version>` stands for the new version, such as `0.2.0`.
 ## Choosing the version
 
 Versions follow [semantic versioning](https://semver.org), and tags carry the version alone, with
-no `v`. Before 1.0.0, a release that breaks the interface raises the minor version, and any other
-release the patch. Raising the oldest version of a compiler that pedantjson supports breaks the
-interface.
+no `v`. Before 1.0.0, a release that breaks the interface or adds to it raises the minor version,
+and any other release, such as one that only fixes what is there, the patch. Raising the oldest
+version of a compiler that pedantjson supports breaks the interface.
 
 ## 1. Make the release
 
