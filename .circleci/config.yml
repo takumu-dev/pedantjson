@@ -34,6 +34,9 @@ executors:
       # vcpkg uses the image's CMake and Ninja rather than downloading its own, which it has none
       # of for Arm.
       VCPKG_FORCE_SYSTEM_BINARIES: "1"
+      # Ninja counts the host's processors rather than the job's two, and ran so many compiles at
+      # once that a sanitizer build ran out of the job's memory.
+      CMAKE_BUILD_PARALLEL_LEVEL: "2"
 
 commands:
   # Jobs with one id build the same ports with the same compiler, so they share a cache.
