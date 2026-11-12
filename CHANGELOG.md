@@ -7,6 +7,8 @@ the form of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions f
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-12
+
 ### Added
 
 - `write`, which writes any value of a document as JSON text, its numbers in the text they were
@@ -63,6 +65,7 @@ the form of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions f
   library builds with exceptions enabled or disabled, with GCC 12, Clang 19 with libstdc++,
   Clang 20 with libc++, MSVC 14.44, Apple Clang from Xcode 26.4, and newer.
 
-[Unreleased]: https://github.com/takumu-dev/pedantjson/compare/0.1.1...HEAD
+[Unreleased]: https://github.com/takumu-dev/pedantjson/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/takumu-dev/pedantjson/releases/tag/0.2.0
 [0.1.1]: https://github.com/takumu-dev/pedantjson/releases/tag/0.1.1
 [0.1.0]: https://github.com/takumu-dev/pedantjson/releases/tag/0.1.0
