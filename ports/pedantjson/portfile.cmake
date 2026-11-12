@@ -4,7 +4,7 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO takumu-dev/pedantjson
     REF "${VERSION}"
-    SHA512 1aa74e7d5f1c8d909ede684ef135de13b65cd3db7d88a91e7da8ee3de3c8fd56fc197b36b7be7e5cb047bfcd8db59b4c6dfb1ac6c39fbcfa41e6db2c5ac1bb8d
+    SHA512 7212490a2eeea5f1691fe2d9a5a149ed205df0efffa610a8b0c679a3502f314ba2997cd657d6ab2f2d0bccdcf69308c555ebc39fd59b2c59ff7a21e4208e1626
     HEAD_REF develop
 )
 

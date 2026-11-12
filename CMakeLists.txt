@@ -5,7 +5,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(pedantjson
-    VERSION 0.1.1
+    VERSION 0.2.0
     DESCRIPTION "A strict JSON reader that puts a position on every key and value"
     HOMEPAGE_URL "https://github.com/takumu-dev/pedantjson"
     LANGUAGES CXX
@@ -35,10 +35,13 @@ function(pedantjson_add_library target)
     target_sources(${target}
         PRIVATE
             "${dir}/src/document.cpp"
+            "${dir}/src/draft.cpp"
             "${dir}/src/number.cpp"
             "${dir}/src/parse.cpp"
             "${dir}/src/pointer.cpp"
             "${dir}/src/storage.hpp"
+            "${dir}/src/utf8.hpp"
+            "${dir}/src/write.cpp"
         PUBLIC
             FILE_SET HEADERS
             BASE_DIRS "${dir}/include"

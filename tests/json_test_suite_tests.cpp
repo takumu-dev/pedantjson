@@ -239,3 +239,22 @@ TEST_CASE("the table names every file whose outcome the suite leaves open", "[JS
         CHECK(decision_for(file).has_value());
     }
 }
+
+TEST_CASE("every text the suite has read is written in both layouts and reads back as the same "
+          "tree",
+          "[JSONTestSuite]") {
+    std::vector<std::string> names = suite_files("y_");
+    for (const std::string& name : suite_files("i_")) {
+        if (!support::required(decision_for(name)).error) {
+            names.push_back(name);
+        }
+    }
+    const auto name = GENERATE_COPY(from_range(names));
+    const auto indent = GENERATE(std::optional<unsigned>{}, 2U);
+    CAPTURE(name, indent);
+    const auto document = support::parsed(read(name));
+    const std::string written = pedantjson::write(document.root(), {.indent = indent});
+    CAPTURE(written);
+    support::check_same_tree(document.root(), support::parsed(written).root());
+    CHECK(pedantjson::write(pedantjson::Draft{document.root()}, {.indent = indent}) == written);
+}

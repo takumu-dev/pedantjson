@@ -7,6 +7,22 @@ the form of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions f
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-12
+
+### Added
+
+- `write`, which writes any value of a document as JSON text, its numbers in the text they were
+  read with and its members in their order, duplicates included. `WriteOptions::indent` lays the
+  text out with one element or member to a line, and leaves it compact by default.
+- `Draft`, a JSON value built in memory to be written: made from null, a boolean, any number type
+  that `Number::to` reads, or a string, or as an array or object that elements and members are
+  appended to, or copied from a value of a document. Writing one returns a
+  `std::expected<std::string, WriteError>`, refusing a `float` or `double` that isn't finite and a
+  string or name that isn't UTF-8, with the pointer to the first such value. A `float` or `double`
+  is written in the shortest form that reads back as the same value, and an integer exactly.
+- Whatever `write` writes, `parse` reads back as the same values, given a `max_depth` as deep as
+  what was written.
+
 ## [0.1.1] - 2026-11-11
 
 ### Fixed
@@ -49,6 +65,7 @@ the form of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions f
   library builds with exceptions enabled or disabled, with GCC 12, Clang 19 with libstdc++,
   Clang 20 with libc++, MSVC 14.44, Apple Clang from Xcode 26.4, and newer.
 
-[Unreleased]: https://github.com/takumu-dev/pedantjson/compare/0.1.1...HEAD
+[Unreleased]: https://github.com/takumu-dev/pedantjson/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/takumu-dev/pedantjson/releases/tag/0.2.0
 [0.1.1]: https://github.com/takumu-dev/pedantjson/releases/tag/0.1.1
 [0.1.0]: https://github.com/takumu-dev/pedantjson/releases/tag/0.1.0
