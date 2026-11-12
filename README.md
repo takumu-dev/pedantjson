@@ -15,6 +15,9 @@ It is meant for formats written by hand, whose readers have to point at each mis
 parser that quietly keeps the last of two duplicate keys, or forgets where a value came from, can't
 do that.
 
+It also writes: any value of a document, or a draft, a value built in memory, as compact or
+indented text that it reads back as the same values, as [Writing](#writing) describes.
+
 pedantjson is at an early stage: until 1.0.0, a minor release may break the interface, and
 `CHANGELOG.md` lists what each release changes. It reads the grammar of
 [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) strictly, rejecting every text the RFC forbids
@@ -98,6 +101,17 @@ Everything is in namespace `pedantjson`, in the one header `<pedantjson/pedantjs
   stops being a pointer, and a `message()`.
 - A `SyntaxError` has a `code`, the `offset` where the text stops being JSON, the `position` of
   that offset, and a `message()`.
+- `write(value, WriteOptions = {})` writes a value of a document as text, returning a
+  `std::string`. `WriteOptions::indent` lays the text out with that many spaces to a level, and
+  leaves it compact when it is empty, as it is by default.
+- A `Draft` is a value built in memory to be written. It is made from `nullptr`, a `bool`, any
+  number type that `to<T>()` reads, or a string, or as `Draft::array()` or `Draft::object()`,
+  which `append` adds elements or members to. An explicit `Draft(value)` copies a value of a
+  document. A draft is an ordinary value, copied and moved like any other, and has nothing to read
+  back with.
+- `write(draft, WriteOptions = {})` returns a `std::expected<std::string, WriteError>`. A
+  `WriteError` has a `code`, `not_finite` or `invalid_utf8`, the `pointer` to the first value that
+  can't be written, and a `message()`.
 
 ## Strictness
 
@@ -134,11 +148,77 @@ text it says is JSON is read, every text it says isn't is rejected, and each of 
 outcome it leaves to the parser has a row in a table in `tests/json_test_suite_tests.cpp`, giving
 pedantjson's outcome and the reason for it.
 
+## Writing
+
+`write` writes JSON that `parse` reads back as the same values: the same kinds, members in the same
+order, duplicates included, the same strings, and, read with `to<T>()` into the type each number
+was made from, the same numbers. That holds when the text is read with a `ParseOptions::max_depth`
+at least as deep as the arrays and objects written, since `write` writes any depth.
+
+```cpp
+#include <pedantjson/pedantjson.hpp>
+
+#include <iostream>
+#include <limits>
+
+int main() {
+    auto frame = pedantjson::Draft::object();
+    frame.append("frame", 12).append("time", 0.1F).append("name", "start\n");
+    auto samples = pedantjson::Draft::array();
+    samples.append(-0.0).append(1e-7);
+    frame.append("samples", std::move(samples));
+
+    if (const auto text = pedantjson::write(frame, {.indent = 2})) {
+        std::cout << *text << '\n';
+    }
+
+    // What JSON can't hold is refused when the draft is written, with the pointer to it.
+    frame.append("rate", std::numeric_limits<double>::infinity());
+    if (const auto text = pedantjson::write(frame); !text) {
+        std::cerr << text.error().pointer.text() << ": " << text.error().message() << '\n';
+    }
+}
+```
+
+This prints:
+
+```text
+{
+  "frame": 12,
+  "time": 0.1,
+  "name": "start\n",
+  "samples": [
+    -0,
+    1e-07
+  ]
+}
+/rate: number not finite
+```
+
+- Compact text has no whitespace at all. Indented text has one element or member to a line, a
+  space after each colon, and each closing bracket on a line of its own at its parent's indent; an
+  empty array or object stays `[]` or `{}`. An indent of 0 is a broken precondition, checked by
+  `assert`. Either way, the text ends at the value's last character, with no final line feed, and
+  never begins with a byte-order mark, even for a document whose text did.
+- A number from a document is written with the text it was read with, so nothing is lost however
+  large or precise it is. A `float` or `double` in a draft is written in the shortest form that
+  `to<T>()` reads back as the same bits, negative zero and subnormals included, and a `float` is
+  shortest as a `float`. An integer is written exactly.
+- A string or a name is written from its characters, escaped again whatever the text it came from
+  wrote: `\"` and `\\`, `\b`, `\f`, `\n`, `\r` and `\t`, any other character below U+0020 as a
+  `\u` escape in lower-case hexadecimal, and every other character as itself in UTF-8, `/`, DEL,
+  U+2028 and U+2029 included.
+- A draft holds whatever it is given, so a `float` or `double` that isn't finite is refused when
+  the draft is written, as `not_finite`, and a string or a name that isn't UTF-8 as `invalid_utf8`.
+  The error points at the first such value in the order of the text, a name at its member, before
+  the member's value, and a failed write gives no text. A value of a document holds nothing JSON
+  can't, so writing one can't fail.
+
 ## Requirements
 
-- A C++23 compiler and standard library with `std::expected`, and with `std::from_chars` for
-  floating-point numbers. pedantjson supports these, each from the oldest version CI builds and
-  tests it with, through to the newest release, which CI builds too:
+- A C++23 compiler and standard library with `std::expected`, and with `std::from_chars` and
+  `std::to_chars` for floating-point numbers. pedantjson supports these, each from the oldest
+  version CI builds and tests it with, through to the newest release, which CI builds too:
 
   | Compiler | Oldest version |
   |---|---|

@@ -30,6 +30,9 @@ CATCH_REGISTER_ENUM(pedantjson::PointerErrorCode, pedantjson::PointerErrorCode::
 CATCH_REGISTER_ENUM(pedantjson::NumberErrorCode, pedantjson::NumberErrorCode::out_of_range,
                     pedantjson::NumberErrorCode::not_an_integer)
 
+CATCH_REGISTER_ENUM(pedantjson::WriteErrorCode, pedantjson::WriteErrorCode::not_finite,
+                    pedantjson::WriteErrorCode::invalid_utf8)
+
 /// Prints a number read into a type as the value read, or as the code of the error.
 template <typename T> struct Catch::StringMaker<std::expected<T, pedantjson::NumberError>> {
     static std::string convert(const std::expected<T, pedantjson::NumberError>& number) {
@@ -109,6 +112,49 @@ template <typename T> pedantjson::NumberErrorCode number_error(std::string text)
     const auto number = number_as<T>(std::move(text));
     REQUIRE(!number.has_value());
     return number.error().code;
+}
+
+/// Checks that two values are the same tree, as defined below.
+inline void check_same_tree(const pedantjson::Value& value, const pedantjson::Value& other);
+
+/// Checks that two arrays have the same trees as elements, in the same order.
+// NOLINTNEXTLINE(misc-no-recursion): a test's documents nest only a few levels deep
+inline void check_same_elements(const pedantjson::Array& array, const pedantjson::Array& other) {
+    REQUIRE(array.size() == other.size());
+    for (std::size_t index = 0; index < array.size(); ++index) {
+        check_same_tree(element(array, index), element(other, index));
+    }
+}
+
+/// Checks that two objects have members of the same names with the same trees as values, in the
+/// same order, duplicates included.
+// NOLINTNEXTLINE(misc-no-recursion): a test's documents nest only a few levels deep
+inline void check_same_members(const pedantjson::Object& object, const pedantjson::Object& other) {
+    REQUIRE(object.size() == other.size());
+    for (std::size_t index = 0; index < object.size(); ++index) {
+        const pedantjson::Member one = member(object, index);
+        const pedantjson::Member another = member(other, index);
+        CHECK(one.key.name() == another.key.name());
+        check_same_tree(one.value, another.value);
+    }
+}
+
+/// Checks that two values are the same tree: the same kinds, the same number texts and strings,
+/// and the same elements and members in the same order, duplicates included.
+// NOLINTNEXTLINE(misc-no-recursion): a test's documents nest only a few levels deep
+inline void check_same_tree(const pedantjson::Value& value, const pedantjson::Value& other) {
+    REQUIRE(value.kind() == other.kind());
+    CHECK(value.as_bool() == other.as_bool());
+    CHECK(value.as_string() == other.as_string());
+    if (const auto number = value.as_number()) {
+        CHECK(number->text() == required(other.as_number()).text());
+    }
+    if (const auto array = value.as_array()) {
+        check_same_elements(*array, required(other.as_array()));
+    }
+    if (const auto object = value.as_object()) {
+        check_same_members(*object, required(other.as_object()));
+    }
 }
 
 } // namespace support
